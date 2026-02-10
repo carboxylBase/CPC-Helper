@@ -7,9 +7,9 @@ use serde_json::json;
 
 // 国际版用于查询比赛
 const LEETCODE_GRAPHQL_URL: &str = "https://leetcode.com/graphql";
-// [修改] 尝试使用 noj-go 端点，它通常对 Read-Only 请求更宽容
+// noj-go 端点，通常对 Read-Only 请求更宽容 (Rating)
 const LEETCODE_CN_NOJ_URL: &str = "https://leetcode.cn/graphql/noj-go/";
-// 备用标准端点
+// 备用标准端点 (Solved)
 const LEETCODE_CN_GRAPHQL_URL: &str = "https://leetcode.cn/graphql";
 
 #[derive(Deserialize, Debug)]
@@ -101,13 +101,10 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
 
 // [修改] 查询 LeetCode CN 用户 Rating 和 刷题数
 pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
-    println!("[LeetCode] 开始爬取, handle: {}", handle);
-
     let client = Client::new();
     let profile_referer = format!("https://leetcode.cn/u/{}/", handle);
 
-    // 1. Rating Query
-    // [策略调整] 移除 operationName，直接发送匿名 Query，并切换到 noj-go 端点
+    // 1. Rating Query (noj-go)
     let rating_query = json!({
         "query": r#"
             query ($userSlug: String!) {
@@ -119,7 +116,7 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
         "variables": { "userSlug": handle }
     });
 
-    // 2. Solved Query (这个一直很稳定，保持原样但移除 name 以防万一)
+    // 2. Solved Query (graphql)
     let solved_query = json!({
         "query": r#"
             query ($userSlug: String!) {
@@ -133,11 +130,9 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
         "variables": { "userSlug": handle }
     });
 
-    println!("[LeetCode] 发送 GraphQL 请求 (尝试 noj-go 端点)...");
-
     // 并发请求
-    // 注意：rating 请求发送到 LEETCODE_CN_NOJ_URL
-    // solved 请求继续发送到 LEETCODE_CN_GRAPHQL_URL (因为它之前是成功的，没必要改)
+    // rating -> LEETCODE_CN_NOJ_URL
+    // solved -> LEETCODE_CN_GRAPHQL_URL
     let (rating_resp, solved_resp) = tokio::join!(
         client.post(LEETCODE_CN_NOJ_URL)
             .header("Content-Type", "application/json")
@@ -157,53 +152,45 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
 
     // 4. 解析 Rating
     let mut rating_val: Option<u32> = None;
-    match rating_resp {
-        Ok(resp) => {
-            println!("[LeetCode] Rating HTTP Status: {}", resp.status());
-            if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
-                if let Some(errs) = g_resp.errors {
-                    println!("[LeetCode] Rating Errors: {:?}", errs);
-                }
-                if let Some(d) = g_resp.data {
-                    if let Some(ranking) = d.user_contest_ranking {
-                        rating_val = Some(ranking.rating.round() as u32);
-                        println!("[LeetCode] 获取到 Rating: {}", ranking.rating);
-                    } else {
-                        println!("[LeetCode] userContestRanking is null");
-                    }
-                }
-            } else {
-                println!("[LeetCode] Rating JSON 解析失败");
-            }
+    
+    // 如果请求失败，这里不直接返回 Err，而是尝试解析另一个结果，尽可能返回部分数据
+    // 但如果两个都失败，最后可能会返回全空数据，或者你可以选择在这里抛出错误触发重试
+    if let Ok(resp) = rating_resp {
+        if resp.status().is_success() {
+             if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
+                 if let Some(d) = g_resp.data {
+                     if let Some(ranking) = d.user_contest_ranking {
+                         rating_val = Some(ranking.rating.round() as u32);
+                     }
+                 }
+             }
         }
-        Err(e) => println!("[LeetCode] Rating 网络请求失败: {}", e),
     }
 
     // 5. 解析 Solved Count
     let mut solved_count: u32 = 0;
-    match solved_resp {
-        Ok(resp) => {
-            println!("[LeetCode] Solved HTTP Status: {}", resp.status());
-            if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
-                if let Some(d) = g_resp.data {
-                    if let Some(progress) = d.user_question_progress {
-                        solved_count = progress.num_accepted_questions.iter().map(|q| q.count).sum();
-                        println!("[LeetCode] 获取到 Solved: {}", solved_count);
-                    }
-                }
-            }
+    if let Ok(resp) = solved_resp {
+        if resp.status().is_success() {
+             if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
+                 if let Some(d) = g_resp.data {
+                     if let Some(progress) = d.user_question_progress {
+                         solved_count = progress.num_accepted_questions.iter().map(|q| q.count).sum();
+                     }
+                 }
+             }
         }
-        Err(e) => println!("[LeetCode] Solved 网络请求失败: {}", e),
     }
 
-    let stats = UserStats {
+    // 如果两个请求都失败（或者数据都为空），是否需要抛出错误让上层重试？
+    // 这里采取的策略是：只要网络请求没崩 panic，就尽量返回结果（即使是0或None）
+    // 如果你想让网络错误触发重试，可以在上面的 if let Ok(resp) 的 else 分支里做处理。
+    // 但为了保持 user experience，返回部分数据往往比一直转圈重试要好。
+
+    Ok(UserStats {
         platform: "LeetCode".to_string(),
         handle: handle.to_string(),
         solved_count,
         rank: None, 
         rating: rating_val,
-    };
-
-    println!("[LeetCode] 最终构造: {:?}", stats);
-    Ok(stats)
+    })
 }

@@ -1,32 +1,5 @@
 
 ==================================================
-File: src-tauri/src/models.rs
-==================================================
-
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-
-// 现有的 Contest 结构体
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Contest {
-    pub name: String,
-    pub start_time: DateTime<Utc>,
-    pub url: String,
-    pub platform: String,
-}
-
-// [新增] 用户刷题统计结构体
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct UserStats {
-    pub platform: String,      // 平台 (e.g., "Codeforces")
-    pub handle: String,        // 用户名/ID
-    pub solved_count: u32,     // 刷题数 (AC数，去重后)
-    // 预留字段，方便未来扩展 (例如排名、积分等)
-    pub rank: Option<String>,  
-    pub rating: Option<u32>,
-}
-
-==================================================
 File: src-tauri/src/lib.rs
 ==================================================
 
@@ -71,10 +44,17 @@ async fn fetch_all_contests() -> Result<Vec<Contest>, String> {
 // [修改] 增加重试机制 (Max 3 times)
 #[tauri::command]
 async fn fetch_user_stats(platform: String, handle: String, cookie: Option<String>) -> Result<UserStats, String> {
+    // [Debug] 打印接收到的请求
+    println!("\n[Lib] 收到前端请求: Platform='{}', Handle='{}'", platform, handle);
+
     let max_retries = 3;
     let mut last_error = String::new();
 
     for attempt in 1..=max_retries {
+        if attempt > 1 {
+            println!("[Lib] 第 {} 次重试...", attempt);
+        }
+
         // 根据平台分发请求
         let res = match platform.to_lowercase().as_str() {
             "codeforces" => {
@@ -94,14 +74,22 @@ async fn fetch_user_stats(platform: String, handle: String, cookie: Option<Strin
                     .await
                     .map_err(|e| e.to_string())
             },
-            // 未来扩展
-            // "leetcode" => platforms::leetcode::fetch_user_stats(&handle).await...
+            "leetcode" => {
+                println!("[Lib] 进入 LeetCode 处理分支"); 
+                platforms::leetcode::fetch_user_stats(&handle)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
             _ => Err(format!("Platform '{}' not supported yet", platform)),
         };
 
         match res {
-            Ok(stats) => return Ok(stats), // 成功则直接返回
+            Ok(stats) => {
+                println!("[Lib] 请求成功，返回数据: {:?}", stats);
+                return Ok(stats); // 成功则直接返回
+            }
             Err(e) => {
+                println!("[Lib] 请求失败: {}", e);
                 last_error = e;
                 // 如果不是最后一次尝试，则等待后重试
                 if attempt < max_retries {
@@ -113,6 +101,7 @@ async fn fetch_user_stats(platform: String, handle: String, cookie: Option<Strin
     }
 
     // 3次全部失败，返回最后一次的错误
+    println!("[Lib] 3次重试全部失败，抛出错误");
     Err(last_error)
 }
 
@@ -127,6 +116,17 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+==================================================
+File: src-tauri/src/platforms/mod.rs
+==================================================
+
+// 文件路径: src/platforms/mod.rs
+
+pub mod atcoder;
+pub mod codeforces;
+pub mod nowcoder;
+pub mod leetcode;
 
 ==================================================
 File: src/components/DashboardGrid.tsx
@@ -144,7 +144,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   const cfRef = useRef<PlatformCardRef>(null);
   const acRef = useRef<PlatformCardRef>(null);
   const ncRef = useRef<PlatformCardRef>(null);
-  // LeetCode 和 HDU 目前禁用，暂不需要 ref，或者预留
+  // LeetCode Ref
   const lcRef = useRef<PlatformCardRef>(null);
   const hduRef = useRef<PlatformCardRef>(null);
 
@@ -154,7 +154,9 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
     setIsGlobalRefreshing(true);
     // 并发触发所有已启用平台的搜索
     // 即使某个失败，allSettled 也会等待所有完成
-    const refs = [cfRef, acRef, ncRef];
+    
+    // [修改点 1]: 将 lcRef 加入到数组中
+    const refs = [cfRef, acRef, ncRef, lcRef]; 
     
     await Promise.allSettled(
       refs.map(ref => ref.current?.triggerSearch())
@@ -199,13 +201,14 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           isEnabled={true} 
         />
 
-        {/* 2. LeetCode (Placeholder) */}
+        {/* 2. LeetCode (Enabled) */}
+        {/* [修改点 2]: 将 isEnabled 改为 true */}
         <PlatformCard 
           ref={lcRef}
           platformName="LeetCode" 
           platformKey="leetcode"
           cardStyle={cardStyle}
-          isEnabled={false} 
+          isEnabled={true} 
         />
 
         {/* 3. AtCoder (Enabled) */}
@@ -226,7 +229,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           isEnabled={true} 
         />
           
-          {/* 5. HDU (Placeholder) */}
+          {/* 5. HDU (Placeholder - 保持禁用) */}
           <PlatformCard 
           ref={hduRef}
           platformName="HDU" 

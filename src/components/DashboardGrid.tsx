@@ -12,6 +12,8 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   const ncRef = useRef<PlatformCardRef>(null);
   // LeetCode Ref
   const lcRef = useRef<PlatformCardRef>(null);
+  // Luogu Ref [新增]
+  const luoguRef = useRef<PlatformCardRef>(null);
   const hduRef = useRef<PlatformCardRef>(null);
 
   const [isGlobalRefreshing, setIsGlobalRefreshing] = useState(false);
@@ -21,8 +23,8 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
     // 并发触发所有已启用平台的搜索
     // 即使某个失败，allSettled 也会等待所有完成
     
-    // [修改点 1]: 将 lcRef 加入到数组中
-    const refs = [cfRef, acRef, ncRef, lcRef]; 
+    // [修改点 1]: 将 luoguRef 加入到数组中
+    const refs = [cfRef, acRef, ncRef, lcRef, luoguRef]; 
     
     await Promise.allSettled(
       refs.map(ref => ref.current?.triggerSearch())
@@ -68,7 +70,6 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
         />
 
         {/* 2. LeetCode (Enabled) */}
-        {/* [修改点 2]: 将 isEnabled 改为 true */}
         <PlatformCard 
           ref={lcRef}
           platformName="LeetCode" 
@@ -95,7 +96,16 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           isEnabled={true} 
         />
           
-          {/* 5. HDU (Placeholder - 保持禁用) */}
+          {/* 5. Luogu (Enabled) [新增] */}
+          <PlatformCard 
+          ref={luoguRef}
+          platformName="Luogu" 
+          platformKey="luogu"
+          cardStyle={cardStyle}
+          isEnabled={true} 
+        />
+          
+          {/* 6. HDU (Placeholder - 保持禁用) */}
           <PlatformCard 
           ref={hduRef}
           platformName="HDU" 
