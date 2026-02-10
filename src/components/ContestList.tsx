@@ -1,0 +1,115 @@
+import { useState, useEffect } from 'react';
+import { Contest } from '../types';
+import { fetchAllContests } from '../services/contestService';
+import { getPlatformColor, formatTime, formatDate } from '../utils';
+import { open } from '@tauri-apps/plugin-shell';
+import { RefreshIcon, ExternalLinkIcon } from './Icons';
+
+interface ContestListProps {
+  cardStyle: any;
+}
+
+const ContestList = ({ cardStyle }: ContestListProps) => {
+  const [contests, setContests] = useState<Contest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadContests = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchAllContests();
+      setContests(data);
+    } catch (err) {
+      setError('Failed to fetch contests.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadContests();
+  }, []);
+
+  const handleOpenLink = async (url: string) => {
+    try {
+      await open(url);
+    } catch (err) {
+      console.error('Failed to open link:', err);
+    }
+  };
+
+  return (
+    <div className="animate-fade-in">
+      <div className="flex justify-end mb-4">
+        <button 
+          onClick={loadContests}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm text-gray-300 transition-colors"
+        >
+          <RefreshIcon /> Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/50 text-red-200 p-4 rounded-lg mb-6 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-20">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-28 rounded-2xl animate-pulse bg-gray-800/50"></div>
+          ))
+        ) : contests.length === 0 ? (
+          <div className="col-span-full text-center py-10 text-gray-500">
+            No upcoming contests found.
+          </div>
+        ) : (
+          contests.map((contest, index) => (
+            <div 
+              key={`${contest.platform}-${index}`}
+              className="relative rounded-2xl p-5 transition-all duration-300 hover:scale-[1.01] hover:shadow-lg group border border-white/5 flex flex-col justify-between h-full"
+              style={cardStyle}
+            >
+              <div 
+                className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl"
+                style={{ backgroundColor: getPlatformColor(contest.platform) }}
+              />
+              <div className="flex justify-between items-start pl-3 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span 
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white/90 shadow-sm uppercase tracking-wide"
+                      style={{ backgroundColor: getPlatformColor(contest.platform) }}
+                    >
+                      {contest.platform}
+                    </span>
+                    <span className="text-gray-400 text-xs font-mono">
+                      {formatDate(contest.start_time)} {formatTime(contest.start_time)}
+                    </span>
+                  </div>
+                  <h3 
+                    className="text-base font-semibold text-white/90 leading-tight cursor-pointer hover:text-blue-300 transition-colors line-clamp-2"
+                    onClick={() => handleOpenLink(contest.url)}
+                    title={contest.name}
+                  >
+                    {contest.name}
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => handleOpenLink(contest.url)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-gray-400 hover:text-white"
+                >
+                  <ExternalLinkIcon />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ContestList;
