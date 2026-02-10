@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useEffect } from 'react';
 import PlatformCard, { PlatformCardRef } from './PlatformCard';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
 import { getPlatformColor } from '../utils';
@@ -13,7 +13,72 @@ interface ChartData {
   color: string;
 }
 
+// ----------------------------------------------------------------------------
+// 动画组件：PopOutActiveSector
+// ----------------------------------------------------------------------------
+const PopOutActiveSector = (props: any) => {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, midAngle } = props;
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    const rafId = requestAnimationFrame(() => {
+        setIsMounted(true);
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  const RADIAN = Math.PI / 180;
+  const sin = Math.sin(-RADIAN * midAngle);
+  const cos = Math.cos(-RADIAN * midAngle);
+  
+  const mx = 12 * cos;
+  const my = 12 * sin;
+
+  return (
+    <g>
+      {/* 幽灵判定层 */}
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill="transparent" 
+        stroke="none"
+      />
+
+      {/* 视觉动画层 */}
+      <g
+        style={{
+          transformBox: 'fill-box',
+          transformOrigin: 'center',
+          transition: 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+          transform: isMounted 
+            ? `translate(${mx}px, ${my}px) scale(1.05)` 
+            : `translate(0px, 0px) scale(1)`
+        }}
+        pointerEvents="none" 
+      >
+        <Sector
+          cx={cx}
+          cy={cy}
+          innerRadius={innerRadius}
+          outerRadius={outerRadius}
+          startAngle={startAngle}
+          endAngle={endAngle}
+          fill={fill}
+          cornerRadius={6}
+          className="filter drop-shadow-xl"
+        />
+      </g>
+    </g>
+  );
+};
+
+
 const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
+  // Refs to child components
   const cfRef = useRef<PlatformCardRef>(null);
   const acRef = useRef<PlatformCardRef>(null);
   const ncRef = useRef<PlatformCardRef>(null);
@@ -21,26 +86,56 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   const luoguRef = useRef<PlatformCardRef>(null);
   const hduRef = useRef<PlatformCardRef>(null);
 
+  // UI State
   const [isGlobalRefreshing, setIsGlobalRefreshing] = useState(false);
   const [solvedStats, setSolvedStats] = useState<Record<string, number>>({});
-
   const [activeIndex, setActiveIndex] = useState<number>(-1);
 
+  // Logic Refs
+  const isBatchingUpdateRef = useRef(false);
+  const pendingStatsRef = useRef<Record<string, number>>({});
+
   const handleStatsUpdate = (platformKey: string, count: number) => {
-    setSolvedStats(prev => ({
-      ...prev,
-      [platformKey]: count
-    }));
+    if (isBatchingUpdateRef.current) {
+      pendingStatsRef.current[platformKey] = count;
+    } else {
+      setSolvedStats(prev => ({
+        ...prev,
+        [platformKey]: count
+      }));
+    }
   };
 
   const handleRefreshAll = async () => {
     setIsGlobalRefreshing(true);
+    isBatchingUpdateRef.current = true;
+    pendingStatsRef.current = {}; 
+
     const refs = [cfRef, acRef, ncRef, lcRef, luoguRef];
+    
     await Promise.allSettled(
       refs.map(ref => ref.current?.triggerSearch())
     );
+
+    setSolvedStats(prev => ({
+      ...prev,
+      ...pendingStatsRef.current
+    }));
+
+    isBatchingUpdateRef.current = false;
     setIsGlobalRefreshing(false);
   };
+
+  // --------------------------------------------------------------------------
+  // 新增：组件挂载（软件启动）时自动触发一次查询
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    // 延迟极短的时间执行，确保子组件 ref 已完全挂载
+    const timer = setTimeout(() => {
+      handleRefreshAll();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const chartData: ChartData[] = useMemo(() => {
     const data = [
@@ -61,24 +156,6 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   }, [solvedStats]);
 
   const totalSolved = chartData.reduce((acc, curr) => acc + curr.value, 0);
-
-  const renderActiveShape = (props: any) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-    return (
-      <g>
-        <Sector
-          cx={cx}
-          cy={cy}
-          innerRadius={innerRadius}
-          outerRadius={outerRadius + 8}
-          startAngle={startAngle}
-          endAngle={endAngle}
-          fill={fill}
-          className="drop-shadow-lg filter transition-all duration-300"
-        />
-      </g>
-    );
-  };
 
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
@@ -204,7 +281,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           <div className="flex flex-col md:flex-row items-center justify-center gap-8 h-[300px]">
             {/* 左侧：图表 */}
             <div className="w-full h-full md:w-1/2 relative" onMouseLeave={onPieLeave}>
-               <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={chartData}
@@ -213,12 +290,15 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
                     innerRadius={60}
                     outerRadius={80}
                     paddingAngle={5}
+                    cornerRadius={4}
                     dataKey="value"
                     stroke="none"
-                    // @ts-ignore: Recharts type definition mismatch for activeIndex
+                    // @ts-ignore: Recharts type definition mismatch
                     activeIndex={activeIndex}
-                    activeShape={renderActiveShape}
+                    activeShape={PopOutActiveSector} 
                     onMouseEnter={onPieEnter}
+                    // 关闭默认动画以完全接管 active 态
+                    isAnimationActive={true}
                   >
                     {chartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} stroke="none"/>
