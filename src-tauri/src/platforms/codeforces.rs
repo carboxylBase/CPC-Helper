@@ -16,11 +16,14 @@ struct CfResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct CfContest {
     id: u64,
     name: String,
     phase: String,
-    startTimeSeconds: Option<i64>,
+    // JSON 中是 startTimeSeconds, 这里映射为 start_time_seconds
+    start_time_seconds: Option<i64>, 
 }
 
 #[derive(Deserialize)]
@@ -36,9 +39,13 @@ struct CfSubmission {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CfProblem {
-    contestId: Option<u64>,
+    // JSON 中是 contestId
+    contest_id: Option<u64>,
     index: String,
+    // 标记允许未使用的代码，消除 warning
+    #[allow(dead_code)]
     name: String,
 }
 
@@ -50,6 +57,7 @@ struct CfUserInfoResponse {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct CfUserInfo {
     rating: Option<u32>,
     rank: Option<String>,
@@ -73,7 +81,8 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
 
     for c in cf_res.result {
         if c.phase == "BEFORE" {
-            if let Some(start_ts) = c.startTimeSeconds {
+            // 这里使用了新的蛇形命名字段
+            if let Some(start_ts) = c.start_time_seconds {
                 let start_time = Utc.timestamp_opt(start_ts, 0).single();
                 if let Some(st) = start_time {
                     if st > now {
@@ -119,7 +128,8 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
     for submission in status_resp.result {
         if let Some(verdict) = submission.verdict {
             if verdict == "OK" {
-                if let Some(cid) = submission.problem.contestId {
+                // 这里使用了新的蛇形命名字段
+                if let Some(cid) = submission.problem.contest_id {
                     let key = format!("{}-{}", cid, submission.problem.index);
                     solved_problems.insert(key);
                 }

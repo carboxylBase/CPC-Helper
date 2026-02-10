@@ -63,12 +63,9 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
     Ok(contests)
 }
 
-// [终极修复版]
-// 依赖 Cargo.toml 中的 features = ["gzip"]
-// 不再手动设置 Accept-Encoding，reqwest 会自动模拟浏览器行为并自动解压
+// [Clean Version]
+// 移除了所有 println! 调试信息
 pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
-    println!("[AtCoder Debug] Starting fetch for handle: {}", handle);
-
     let client = reqwest::Client::builder()
         // 使用 Firefox UA
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0")
@@ -83,40 +80,19 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
         .header("Accept", "application/json")
         .header("Accept-Language", "en-US,en;q=0.5")
         .header("Referer", "https://kenkoooo.com/");
-        // 注意：这里不需要再手动设置 Accept-Encoding 了
-        // 只要 Cargo.toml 里开了 gzip，reqwest 会自动带上 gzip 头并自动解压
-    
-    println!("[AtCoder Debug] Sending Kenkoooo Request (ac_rank)...");
     
     let solved_count = match ac_req.send().await {
         Ok(resp) => {
-            let status = resp.status();
-            println!("[AtCoder Debug] Kenkoooo Status: {}", status);
-            
-            if status.is_success() {
+            if resp.status().is_success() {
                 match resp.json::<KenkooooAcRank>().await {
-                    Ok(info) => {
-                        println!("[AtCoder Debug] Fetched AC Count: {}", info.count);
-                        info.count
-                    },
-                    Err(e) => {
-                        println!("[AtCoder Debug] JSON Parse Error: {}", e);
-                        0
-                    }
+                    Ok(info) => info.count,
+                    Err(_) => 0, // 解析失败静默处理
                 }
             } else {
-                if status == reqwest::StatusCode::NOT_FOUND {
-                    println!("[AtCoder Debug] 404 Not Found! Please check capitalization (e.g. 'User' vs 'user')");
-                } else if status == reqwest::StatusCode::FORBIDDEN {
-                    println!("[AtCoder Debug] 403 Forbidden. Is 'gzip' feature enabled in Cargo.toml?");
-                }
-                0
+                0 // 403/404 等错误静默处理
             }
         },
-        Err(e) => {
-            println!("[AtCoder Debug] Network Error: {}", e);
-            0
-        }
+        Err(_) => 0, // 网络错误静默处理
     };
 
     // ---------------------------------------------------------
@@ -126,17 +102,13 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
     let profile_req = client.get(&profile_url)
          .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
 
-    println!("[AtCoder Debug] Sending Profile Request...");
-
     let mut rating: Option<u32> = None;
     let mut rank_str: Option<String> = None;
 
-    match profile_req.send().await {
-        Ok(resp) => {
-            if resp.status().is_success() {
-                let html = resp.text().await.unwrap_or_default();
+    if let Ok(resp) = profile_req.send().await {
+        if resp.status().is_success() {
+            if let Ok(html) = resp.text().await {
                 let document = Html::parse_document(&html);
-
                 let tr_selector = Selector::parse("tr").unwrap();
                 let th_selector = Selector::parse("th").unwrap();
                 let td_selector = Selector::parse("td").unwrap();
@@ -160,9 +132,6 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
                     }
                 }
             }
-        },
-        Err(e) => {
-             println!("[AtCoder Debug] Profile Network Error: {}", e);
         }
     }
 

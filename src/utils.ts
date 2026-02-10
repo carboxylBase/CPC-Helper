@@ -63,6 +63,15 @@ export const getRatingColor = (rating?: number, platform: string = 'codeforces')
     return '#FF0000';                     // Red
   }
 
+  // NowCoder 颜色逻辑 (参考: 灰 <1200, 蓝 <1500, 绿 <2200, 金 <2600, 红 >2600)
+  if (p === 'nowcoder') {
+    if (rating < 1200) return '#9ca3af'; // Gray
+    if (rating < 1500) return '#3b82f6'; // Blue
+    if (rating < 2200) return '#22c55e'; // Green
+    if (rating < 2600) return '#fbbf24'; // Gold/Yellow
+    return '#ef4444';                    // Red
+  }
+
   // Codeforces 颜色逻辑 (默认)
   if (rating < 1200) return '#9ca3af'; // Gray (Newbie)
   if (rating < 1400) return '#22c55e'; // Green (Pupil)

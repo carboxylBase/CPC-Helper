@@ -36,24 +36,27 @@ async fn fetch_all_contests() -> Result<Vec<Contest>, String> {
     Ok(all_contests)
 }
 
-// [关键修改] 这里增加了 "atcoder" 的匹配分支
+// [修改] 增加 cookie 参数 (Option<String>)
 #[tauri::command]
-async fn fetch_user_stats(platform: String, handle: String) -> Result<UserStats, String> {
+async fn fetch_user_stats(platform: String, handle: String, cookie: Option<String>) -> Result<UserStats, String> {
     match platform.to_lowercase().as_str() {
         "codeforces" => {
             platforms::codeforces::fetch_user_stats(&handle)
                 .await
                 .map_err(|e| e.to_string())
         },
-        // --- 新增部分开始 ---
         "atcoder" => {
-            // 这里调用了你刚刚写的那个带 Debug 信息的函数
             platforms::atcoder::fetch_user_stats(&handle)
                 .await
                 .map_err(|e| e.to_string())
         },
-        // --- 新增部分结束 ---
-        
+        "nowcoder" => {
+            // [修改] 获取传入的 cookie，如果没传则默认为空字符串 (nowcoder 模块内部会检查并报错)
+            let user_cookie = cookie.unwrap_or_default();
+            platforms::nowcoder::fetch_user_stats(&handle, &user_cookie)
+                .await
+                .map_err(|e| e.to_string())
+        },
         // 未来扩展
         // "leetcode" => platforms::leetcode::fetch_user_stats(&handle).await...
         _ => Err(format!("Platform '{}' not supported yet", platform)),

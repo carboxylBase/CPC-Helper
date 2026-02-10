@@ -33,12 +33,12 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           isEnabled={true} 
         />
 
-          {/* 4. NowCoder (Placeholder) */}
+          {/* 4. NowCoder (Enabled) */}
           <PlatformCard 
           platformName="NowCoder" 
           platformKey="nowcoder"
           cardStyle={cardStyle}
-          isEnabled={false} 
+          isEnabled={true} 
         />
           
           {/* 5. HDU (Placeholder) */}
