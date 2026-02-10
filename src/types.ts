@@ -5,4 +5,11 @@ export interface Contest {
   platform: string;
 }
 
-export type PlatformType = 'Codeforces' | 'AtCoder' | 'NowCoder' | 'LeetCode';
+// [新增]
+export interface UserStats {
+  platform: string;
+  handle: string;
+  solved_count: number;
+  rank?: string;
+  rating?: number;
+}

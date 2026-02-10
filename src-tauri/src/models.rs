@@ -1,13 +1,22 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
 
-// 增加 Serialize 以便 Tauri 可以将其转换为 JSON 返回给前端
-// 增加 Deserialize 以便后续可能的反序列化需求
-// Clone 和 Debug 是标准 Rust 实践
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// 现有的 Contest 结构体
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Contest {
     pub name: String,
     pub start_time: DateTime<Utc>,
     pub url: String,
     pub platform: String,
+}
+
+// [新增] 用户刷题统计结构体
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserStats {
+    pub platform: String,      // 平台 (e.g., "Codeforces")
+    pub handle: String,        // 用户名/ID
+    pub solved_count: u32,     // 刷题数 (AC数，去重后)
+    // 预留字段，方便未来扩展 (例如排名、积分等)
+    pub rank: Option<String>,  
+    pub rating: Option<u32>,
 }

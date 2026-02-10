@@ -4,13 +4,13 @@ export const getPlatformColor = (platform: string): string => {
     case 'codeforces':
       return '#3182ce'; // Blue-600
     case 'atcoder':
-      return '#d69e2e'; // Yellow-600 (原牛客颜色)
+      return '#d69e2e'; // Yellow-600
     case 'nowcoder':
-      return '#16a34a'; // Green-600 (新牛客颜色)
+      return '#16a34a'; // Green-600
     case 'leetcode':
       return '#d97706'; // Amber-600
     case 'hdu':
-      return '#e53e3e'; // Red-600 for HDU
+      return '#e53e3e'; // Red-600
     default:
       return '#718096'; // Gray-600
   }
@@ -19,7 +19,6 @@ export const getPlatformColor = (platform: string): string => {
 // 格式化时间显示 (HH:mm)
 export const formatTime = (isoString: string): string => {
   const date = new Date(isoString);
-  // 使用原生 Intl 格式化，确保补零
   return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 };
 
@@ -41,32 +40,25 @@ export const formatDate = (isoString: string): string => {
   if (isSameDay(date, now)) return '今天';
   if (isSameDay(date, tomorrow)) return '明天';
 
-  // 格式化为 MM-dd
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
   return `${month}-${day}`;
 };
 
-// 计算倒计时或状态文本
-export const getStatusText = (isoString: string): string => {
-  const now = new Date();
-  const start = new Date(isoString);
-  const diffMs = start.getTime() - now.getTime();
-  const diffHours = diffMs / (1000 * 60 * 60);
-
-  if (diffHours < 0) return '进行中/已结束';
-  if (diffHours < 1) return '即将开始';
-  if (diffHours < 24) return `${Math.floor(diffHours)}小时后`;
-
-  // 超过24小时显示完整日期 MM-dd HH:mm
-  const month = (start.getMonth() + 1).toString().padStart(2, '0');
-  const day = start.getDate().toString().padStart(2, '0');
-  const hours = start.getHours().toString().padStart(2, '0');
-  const minutes = start.getMinutes().toString().padStart(2, '0');
-  return `${month}-${day} ${hours}:${minutes}`;
+// [新增] 获取 Codeforces Rating 颜色
+export const getRatingColor = (rating?: number): string => {
+  if (!rating) return '#9ca3af'; // gray-400 (Unrated)
+  if (rating < 1200) return '#9ca3af'; // Gray (Newbie)
+  if (rating < 1400) return '#22c55e'; // Green (Pupil)
+  if (rating < 1600) return '#06b6d4'; // Cyan (Specialist)
+  if (rating < 1900) return '#3b82f6'; // Blue (Expert)
+  if (rating < 2100) return '#a855f7'; // Purple (Candidate Master)
+  if (rating < 2300) return '#fbbf24'; // Orange (Master)
+  if (rating < 2400) return '#fbbf24'; // Orange (International Master)
+  return '#ef4444'; // Red (Grandmaster+)
 };
 
-// 将 Hex 颜色与透明度转换为 RGBA，用于动态样式绑定
+// 将 Hex 颜色与透明度转换为 RGBA
 export const hexToRgba = (hex: string, alpha: number): string => {
   let c: any;
   if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
@@ -76,5 +68,5 @@ export const hexToRgba = (hex: string, alpha: number): string => {
     // eslint-disable-next-line no-bitwise
     return 'rgba(' + [(c >> 16) & 255, (c >> 8) & 255, c & 255].join(',') + ',' + alpha + ')';
   }
-  return `rgba(31, 41, 55, ${alpha})`; // Fallback
+  return `rgba(31, 41, 55, ${alpha})`; 
 };

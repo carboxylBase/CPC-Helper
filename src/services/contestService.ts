@@ -1,12 +1,11 @@
-import { invoke } from '@tauri-apps/api/core'; // 注意：Tauri v2 使用 core
-import { Contest } from '../types';
+import { invoke } from '@tauri-apps/api/core';
+import { Contest, UserStats } from '../types';
 
 export const fetchAllContests = async (): Promise<Contest[]> => {
-  try {
-    // 调用 Rust 后端的命令
-    return await invoke<Contest[]>('fetch_all_contests');
-  } catch (error) {
-    console.error('Failed to fetch contests:', error);
-    throw error;
-  }
+  return await invoke('fetch_all_contests');
+};
+
+// [新增]
+export const fetchUserStats = async (platform: string, handle: string): Promise<UserStats> => {
+  return await invoke('fetch_user_stats', { platform, handle });
 };
