@@ -36,40 +36,61 @@ async fn fetch_all_contests() -> Result<Vec<Contest>, String> {
     Ok(all_contests)
 }
 
-// [修改] 增加 cookie 参数 (Option<String>)
+// [修改] 增加重试机制 (Max 3 times)
 #[tauri::command]
 async fn fetch_user_stats(platform: String, handle: String, cookie: Option<String>) -> Result<UserStats, String> {
-    match platform.to_lowercase().as_str() {
-        "codeforces" => {
-            platforms::codeforces::fetch_user_stats(&handle)
-                .await
-                .map_err(|e| e.to_string())
-        },
-        "atcoder" => {
-            platforms::atcoder::fetch_user_stats(&handle)
-                .await
-                .map_err(|e| e.to_string())
-        },
-        "nowcoder" => {
-            // [修改] 获取传入的 cookie，如果没传则默认为空字符串 (nowcoder 模块内部会检查并报错)
-            let user_cookie = cookie.unwrap_or_default();
-            platforms::nowcoder::fetch_user_stats(&handle, &user_cookie)
-                .await
-                .map_err(|e| e.to_string())
-        },
-        // 未来扩展
-        // "leetcode" => platforms::leetcode::fetch_user_stats(&handle).await...
-        _ => Err(format!("Platform '{}' not supported yet", platform)),
+    let max_retries = 3;
+    let mut last_error = String::new();
+
+    for attempt in 1..=max_retries {
+        // 根据平台分发请求
+        let res = match platform.to_lowercase().as_str() {
+            "codeforces" => {
+                platforms::codeforces::fetch_user_stats(&handle)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            "atcoder" => {
+                platforms::atcoder::fetch_user_stats(&handle)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            "nowcoder" => {
+                // 使用 as_deref 借用 cookie 内容，避免所有权转移导致无法重试
+                let user_cookie = cookie.as_deref().unwrap_or("");
+                platforms::nowcoder::fetch_user_stats(&handle, user_cookie)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            // 未来扩展
+            // "leetcode" => platforms::leetcode::fetch_user_stats(&handle).await...
+            _ => Err(format!("Platform '{}' not supported yet", platform)),
+        };
+
+        match res {
+            Ok(stats) => return Ok(stats), // 成功则直接返回
+            Err(e) => {
+                last_error = e;
+                // 如果不是最后一次尝试，则等待后重试
+                if attempt < max_retries {
+                    // 简单的指数退避或固定延迟，这里用固定 800ms 防止请求过于频繁
+                    tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+                }
+            }
+        }
     }
+
+    // 3次全部失败，返回最后一次的错误
+    Err(last_error)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init()) 
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
-            fetch_all_contests, 
-            fetch_user_stats 
+            fetch_all_contests,
+            fetch_user_stats
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
