@@ -39,10 +39,17 @@ async fn fetch_all_contests() -> Result<Vec<Contest>, String> {
 // [修改] 增加重试机制 (Max 3 times)
 #[tauri::command]
 async fn fetch_user_stats(platform: String, handle: String, cookie: Option<String>) -> Result<UserStats, String> {
+    // [Debug] 打印接收到的请求
+    println!("\n[Lib] 收到前端请求: Platform='{}', Handle='{}'", platform, handle);
+
     let max_retries = 3;
     let mut last_error = String::new();
 
     for attempt in 1..=max_retries {
+        if attempt > 1 {
+            println!("[Lib] 第 {} 次重试...", attempt);
+        }
+
         // 根据平台分发请求
         let res = match platform.to_lowercase().as_str() {
             "codeforces" => {
@@ -62,14 +69,22 @@ async fn fetch_user_stats(platform: String, handle: String, cookie: Option<Strin
                     .await
                     .map_err(|e| e.to_string())
             },
-            // 未来扩展
-            // "leetcode" => platforms::leetcode::fetch_user_stats(&handle).await...
+            "leetcode" => {
+                println!("[Lib] 进入 LeetCode 处理分支"); 
+                platforms::leetcode::fetch_user_stats(&handle)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
             _ => Err(format!("Platform '{}' not supported yet", platform)),
         };
 
         match res {
-            Ok(stats) => return Ok(stats), // 成功则直接返回
+            Ok(stats) => {
+                println!("[Lib] 请求成功，返回数据: {:?}", stats);
+                return Ok(stats); // 成功则直接返回
+            }
             Err(e) => {
+                println!("[Lib] 请求失败: {}", e);
                 last_error = e;
                 // 如果不是最后一次尝试，则等待后重试
                 if attempt < max_retries {
@@ -81,6 +96,7 @@ async fn fetch_user_stats(platform: String, handle: String, cookie: Option<Strin
     }
 
     // 3次全部失败，返回最后一次的错误
+    println!("[Lib] 3次重试全部失败，抛出错误");
     Err(last_error)
 }
 

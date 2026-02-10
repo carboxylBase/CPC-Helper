@@ -10,7 +10,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   const cfRef = useRef<PlatformCardRef>(null);
   const acRef = useRef<PlatformCardRef>(null);
   const ncRef = useRef<PlatformCardRef>(null);
-  // LeetCode 和 HDU 目前禁用，暂不需要 ref，或者预留
+  // LeetCode Ref
   const lcRef = useRef<PlatformCardRef>(null);
   const hduRef = useRef<PlatformCardRef>(null);
 
@@ -20,7 +20,9 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
     setIsGlobalRefreshing(true);
     // 并发触发所有已启用平台的搜索
     // 即使某个失败，allSettled 也会等待所有完成
-    const refs = [cfRef, acRef, ncRef];
+    
+    // [修改点 1]: 将 lcRef 加入到数组中
+    const refs = [cfRef, acRef, ncRef, lcRef]; 
     
     await Promise.allSettled(
       refs.map(ref => ref.current?.triggerSearch())
@@ -65,13 +67,14 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           isEnabled={true} 
         />
 
-        {/* 2. LeetCode (Placeholder) */}
+        {/* 2. LeetCode (Enabled) */}
+        {/* [修改点 2]: 将 isEnabled 改为 true */}
         <PlatformCard 
           ref={lcRef}
           platformName="LeetCode" 
           platformKey="leetcode"
           cardStyle={cardStyle}
-          isEnabled={false} 
+          isEnabled={true} 
         />
 
         {/* 3. AtCoder (Enabled) */}
@@ -92,7 +95,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           isEnabled={true} 
         />
           
-          {/* 5. HDU (Placeholder) */}
+          {/* 5. HDU (Placeholder - 保持禁用) */}
           <PlatformCard 
           ref={hduRef}
           platformName="HDU" 
