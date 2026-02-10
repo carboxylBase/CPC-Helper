@@ -1,7 +1,7 @@
 use crate::models::Contest;
 use anyhow::Result;
 use scraper::{Html, Selector};
-use chrono::{NaiveDateTime, TimeZone, FixedOffset};
+use chrono::{NaiveDateTime, TimeZone, FixedOffset, Utc};
 
 // HDU 列表地址
 const HDU_URL: &str = "https://acm.hdu.edu.cn/contests/contest_list.php";
@@ -23,14 +23,9 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
     let td_selector = Selector::parse("td").unwrap();
 
     let mut contests = Vec::new();
-    let mut count = 0;
 
     // 3. 解析表格
     for row in document.select(&row_selector) {
-        if count >= 5 {
-            break;
-        }
-
         let tds: Vec<_> = row.select(&td_selector).collect();
         
         // 至少需要有 ID, Name, Date 这几列
@@ -61,7 +56,6 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
         };
 
         // 提取时间 (Index 2)
-        // 经过调试确认，HDU 的时间在第 3 列 (Index 2)
         let time_str = match tds.get(2) {
             Some(el) => el.text().collect::<Vec<_>>().join("").trim().to_string(),
             None => continue,
@@ -72,14 +66,11 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
             Ok(dt) => {
                 let offset = FixedOffset::east_opt(8 * 3600).unwrap();
                 match offset.from_local_datetime(&dt).single() {
-                    Some(local_dt) => local_dt.with_timezone(&chrono::Utc),
+                    Some(local_dt) => local_dt.with_timezone(&Utc),
                     None => continue,
                 }
             },
-            Err(_) => {
-                // 解析失败直接跳过，不再打印警告
-                continue;
-            }
+            Err(_) => continue, // 解析失败直接跳过
         };
 
         contests.push(Contest {
@@ -88,8 +79,20 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
             url,
             platform: "HDU".to_string(),
         });
-        
-        count += 1;
+    }
+
+    // 5. 过滤与排序
+    let now = Utc::now();
+    
+    // 过滤掉已经结束的比赛 (只保留未来的)
+    contests.retain(|c| c.start_time > now);
+
+    // 关键修正：按时间升序排列 (即将开始的在最前面)
+    contests.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+
+    // 只保留最近的 5 场
+    if contests.len() > 5 {
+        contests.truncate(5);
     }
 
     Ok(contests)

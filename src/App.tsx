@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAllContests } from './services/contestService';
 import { Contest } from './types';
-import { getPlatformColor, formatTime, hexToRgba } from './utils';
+import { getPlatformColor, formatTime, formatDate, hexToRgba } from './utils';
 import { open } from '@tauri-apps/plugin-shell';
 
 // --- Icons ---
@@ -154,8 +154,9 @@ function App() {
                         >
                           {contest.platform}
                         </span>
+                        {/* 这里增加了日期显示 */}
                         <span className="text-gray-400 text-xs font-mono">
-                          {formatTime(contest.start_time)}
+                          {formatDate(contest.start_time)}&nbsp;&nbsp;{formatTime(contest.start_time)}
                         </span>
                       </div>
                       <h3 
