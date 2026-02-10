@@ -25,12 +25,12 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           isEnabled={false} 
         />
 
-        {/* 3. AtCoder (Placeholder) */}
+        {/* 3. AtCoder (Enabled) */}
         <PlatformCard 
           platformName="AtCoder" 
           platformKey="atcoder"
           cardStyle={cardStyle}
-          isEnabled={false} 
+          isEnabled={true} 
         />
 
           {/* 4. NowCoder (Placeholder) */}

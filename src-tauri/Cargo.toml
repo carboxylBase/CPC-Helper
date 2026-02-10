@@ -18,7 +18,7 @@ serde_json = "1"
 # --- 爬虫业务依赖 ---
 tokio = { version = "1", features = ["full"] }
 # 注意：reqwest 0.12 需要配合 tokio 1，且配置方式略有不同，这里先用稳健配置
-reqwest = { version = "0.12", features = ["json", "blocking", "rustls-tls"] } 
+reqwest = { version = "0.12", features = ["json", "blocking", "rustls-tls", "gzip"] } 
 scraper = "0.20"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"

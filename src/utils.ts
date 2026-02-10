@@ -4,7 +4,7 @@ export const getPlatformColor = (platform: string): string => {
     case 'codeforces':
       return '#3182ce'; // Blue-600
     case 'atcoder':
-      return '#d69e2e'; // Yellow-600
+      return '#d69e2e'; // AtCoder logo uses black/white, but let's use Dark Gray for card header
     case 'nowcoder':
       return '#16a34a'; // Green-600
     case 'leetcode':
@@ -45,9 +45,25 @@ export const formatDate = (isoString: string): string => {
   return `${month}-${day}`;
 };
 
-// [新增] 获取 Codeforces Rating 颜色
-export const getRatingColor = (rating?: number): string => {
+// [更新] 获取 Rating 颜色，支持多平台
+export const getRatingColor = (rating?: number, platform: string = 'codeforces'): string => {
   if (!rating) return '#9ca3af'; // gray-400 (Unrated)
+
+  const p = platform.toLowerCase();
+
+  // AtCoder 颜色逻辑
+  if (p === 'atcoder') {
+    if (rating < 400) return '#808080';   // Gray
+    if (rating < 800) return '#804000';   // Brown
+    if (rating < 1200) return '#008000';  // Green
+    if (rating < 1600) return '#00C0C0';  // Cyan
+    if (rating < 2000) return '#0000FF';  // Blue
+    if (rating < 2400) return '#C0C000';  // Yellow
+    if (rating < 2800) return '#FF8000';  // Orange
+    return '#FF0000';                     // Red
+  }
+
+  // Codeforces 颜色逻辑 (默认)
   if (rating < 1200) return '#9ca3af'; // Gray (Newbie)
   if (rating < 1400) return '#22c55e'; // Green (Pupil)
   if (rating < 1600) return '#06b6d4'; // Cyan (Specialist)

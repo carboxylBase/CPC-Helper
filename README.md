@@ -1,30 +1,36 @@
-# CPC-Helper Project Documentation (v3.3 - Dashboard & Refactoring Update)
+# CPC-Helper Project Documentation (v3.4 - AtCoder Support Update)
 
 ## 1. 项目概述 (Project Overview)
 
 **项目名称**: `cpc-helper` (原 `contest-cli`)
-**核心功能**: 一个基于 **Tauri v2** 构建的跨平台桌面应用，集成了两大核心模块：
+**核心功能**: 一个基于 **Tauri v2** 构建的跨平台桌面应用，专为算法竞赛选手设计。
+
+**核心模块**:
 
 1. **竞赛日程 (Contest Calendar)**: 并发查询全球主流算法竞赛平台的近期比赛信息。
-2. **刷题仪表盘 (Solver Dashboard)**: [新增] 查询并展示用户的刷题数据（AC数、Rating、段位等），采用网格化仪表盘设计。
+2. **刷题仪表盘 (Solver Dashboard)**: 查询并展示用户的刷题数据（AC数、Rating、段位等），采用网格化仪表盘设计。
 
 **支持平台**:
 
 * **竞赛查询**: Codeforces, AtCoder, NowCoder, LeetCode, HDU (杭电OJ)。
-* **用户查询**: 目前已实现 **Codeforces** (含 Rating & Solved Count)，其他平台（LeetCode, AtCoder 等）已预留 UI 占位。
+* **用户查询**:
+* **Codeforces**: 支持 Rating (带颜色) & Solved Count (官方 API)。
+* **AtCoder [v3.4 新增]**: 支持 Rating (带颜色) & Solved Count (Kenkoooo API)。
+* **待实装**: LeetCode, NowCoder, HDU (目前仅 UI 占位)。
 
-**版本特性 (v3.3)**:
 
-* **架构重构**: 前端 `App.tsx` 完成组件化拆分，解耦了 UI 布局、图标资源与业务逻辑。
-* **功能新增**: 新增 "User Stats" 模块，后端支持并发抓取 Codeforces 的用户信息 (`user.info`) 与提交记录 (`user.status`)。
-* **逻辑修正**: 修复 HDU 爬虫排序逻辑，现在正确显示“即将开始”的最近 5 场比赛（过滤掉已结束的）。
-* **UI 优化**: 竞赛列表增加日期显示 (`MM-DD`)；新增 Dashboard 网格布局；实装 Rating 动态颜色显示。
+
+**版本特性 (v3.4)**:
+
+* **AtCoder 集成**: 成功接入 AtCoder 用户数据。解决了 Kenkoooo API 的反爬虫限制（WAF 403 Forbidden）和 HTML 解析问题。
+* **依赖升级**: 后端 `reqwest` 库开启了 `gzip` 特性，以支持自动解压 HTTP 响应，模拟真实浏览器行为。
+* **UI 适配**: 前端 `utils.ts` 适配了 AtCoder 独有的 Rating 颜色算法（灰/棕/绿/青/蓝/黄/橙/红）。
 
 **技术栈**:
 
-* **Core**: Rust (Tauri v2, Tokio, Reqwest, Scraper, Serde, Chrono, Anyhow)
-* **Frontend**: React (TypeScript), Vite, Tailwind CSS (Component-based Architecture)
-* **State Management**: React Hooks + LocalStorage
+* **Core**: Rust (Tauri v2, Tokio, Reqwest + GZIP, Scraper, Serde)
+* **Frontend**: React (TypeScript), Vite, Tailwind CSS
+* **Key Dependencies**: `reqwest = { version = "0.12", features = ["json", "gzip"] }`
 
 ---
 
@@ -32,30 +38,23 @@
 
 ```text
 cpc-helper/
-├── src/                        # 前端源码 (React + TypeScript)
-│   ├── assets/                 # 静态资源
-│   ├── components/             # [新增] 组件库 (重构核心)
-│   │   ├── Icons.tsx           # SVG 图标集合
-│   │   ├── PlatformCard.tsx    # 单个平台的刷题统计卡片 (核心交互组件)
-│   │   ├── ContestList.tsx     # 比赛列表视图
-│   │   ├── DashboardGrid.tsx   # 刷题仪表盘网格视图
-│   │   └── SettingsDrawer.tsx  # 右侧外观设置抽屉
-│   ├── services/               # 服务层
-│   │   └── contestService.ts   # Tauri invoke 封装 (新增 fetchUserStats)
-│   ├── App.tsx                 # [精简] 主入口 (仅负责布局与全局状态)
-│   ├── index.css               # 全局样式
-│   ├── types.ts                # 类型定义 (含 UserStats)
-│   └── utils.ts                # 工具函数 (颜色映射、Rating配色、时间格式化)
-├── src-tauri/                  # 后端源码 (Rust Tauri 环境)
+├── src/                        # 前端源码
+│   ├── components/
+│   │   ├── DashboardGrid.tsx   # [更新] 启用了 AtCoder 卡片
+│   │   ├── PlatformCard.tsx    # [更新] 传入 platformKey 以支持不同平台的颜色逻辑
+│   │   └── ...
+│   ├── utils.ts                # [更新] 新增 getRatingColor 的 AtCoder 分支逻辑
+│   └── ...
+├── src-tauri/                  # 后端源码
 │   ├── src/
-│   │   ├── platforms/          # 爬虫模块
-│   │   │   ├── codeforces.rs   # [更新] 含 fetch_user_stats 并发逻辑
-│   │   │   ├── hdu.rs          # [修正] 修复排序与时间过滤
-│   │   │   └── ... (其他平台)
-│   │   ├── lib.rs              # [更新] 注册 fetch_user_stats 指令
-│   │   └── models.rs           # [更新] 新增 UserStats 结构体
-│   └── Cargo.toml              # Rust 依赖
-└── package.json                # 前端依赖
+│   │   ├── platforms/
+│   │   │   ├── atcoder.rs      # [核心/重写] 含 fetch_user_stats (Kenkoooo + Scraper)
+│   │   │   ├── codeforces.rs   # CF 爬虫逻辑
+│   │   │   └── ...
+│   │   ├── lib.rs              # [更新] 注册 "atcoder" 指令分支
+│   │   └── models.rs           # 数据模型
+│   └── Cargo.toml              # [关键] reqwest 开启了 gzip feature
+└── ...
 
 ```
 
@@ -65,28 +64,28 @@ cpc-helper/
 
 ### 3.1 后端架构 (Rust)
 
-* **并发模型**:
-* **竞赛抓取**: 继续沿用 `tokio::join!` 并发执行 5 个平台的 `fetch_contests`。
-* **用户统计**: 在 `codeforces::fetch_user_stats` 中，利用 `tokio::join!` 并发请求 `user.status` (做题记录) 和 `user.info` (个人信息)，最大限度减少等待时间。
+* **AtCoder 抓取策略**:
+* **Rating**: 爬取 `atcoder.jp/users/{handle}` 页面，使用 CSS 选择器定位 `<th>Rating</th>` 对应的单元格。
+* **Solved Count**: 调用第三方权威 API `kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank`。
+* **反爬虫绕过 (关键)**:
+1. **GZIP**: `Cargo.toml` 必须开启 `reqwest` 的 `gzip` 特性。
+2. **Headers**: 必须伪装 `User-Agent` (Firefox/Chrome) 且不需要手动设置 `Accept-Encoding` (库自动处理)。
+3. **Case Sensitivity**: Kenkoooo API 对用户名**大小写敏感** (例如 `User` vs `user` 会导致 404)。
 
 
-* **HDU 修正逻辑**:
-* 移除仅抓取前5行的限制，改为扫描全表。
-* 解析时间后，通过 `contests.retain(|c| c.start_time > now)` 过滤历史比赛。
-* 使用 `sort_by(|a, b| a.start_time.cmp(&b.start_time))` 确保最近的比赛排在最前。
+
+
+* **Codeforces 抓取策略**:
+* 并发请求 `user.info` 和 `user.status`，本地去重计算 AC 数。
 
 
 
 ### 3.2 前端架构 (React)
 
-* **组件化 (Componentization)**:
-* **DashboardGrid**: 负责网格布局，根据配置渲染多个 `PlatformCard`。
-* **PlatformCard**: 独立封装了状态（输入框内容、加载态、数据结果）。支持 "Enabled/Disabled" 状态，方便未来逐步接入新平台。
-
-
-* **数据展示**:
-* **Rating Color**: `utils.ts` 中新增 `getRatingColor`，复刻 Codeforces 的颜色分级（红名、紫名等）。
-* **Date Format**: 新增 `formatDate`，智能显示“今天”、“明天”或“MM-DD”。
+* **多态颜色系统**:
+* `utils.ts/getRatingColor`: 接收 `rating` 和 `platform` 两个参数。
+* **Codeforces**: 经典紫名、橙名、红名体系。
+* **AtCoder**: 严格遵循 400 分一档的颜色阶梯 (灰->棕->绿->...)。
 
 
 
@@ -94,122 +93,95 @@ cpc-helper/
 
 ## 4. 维护指南 (Maintenance Guide)
 
-### 4.1 添加新平台的刷题统计 (e.g., LeetCode)
+### 4.1 AtCoder 模块维护
 
-1. **后端 (Rust)**:
-* 在 `src-tauri/src/platforms/leetcode.rs` 中实现 `fetch_user_stats(handle: &str) -> Result<UserStats>`。
-* 在 `src-tauri/src/lib.rs` 的 `fetch_user_stats` match 分支中添加 `"leetcode"` 的处理逻辑。
-
-
-2. **前端 (React)**:
-* 在 `src/components/DashboardGrid.tsx` 中，找到 LeetCode 的 `PlatformCard`，将 `isEnabled` 属性改为 `true`。
+* **API 变动**: 如果 Kenkoooo API 失效，可尝试 `/v3/user/info` 接口（需注意该接口更轻量但信息不同）。
+* **403/404 错误排查**:
+* **403**: 检查 `reqwest` 是否开启了 `gzip`，检查 `User-Agent` 是否过时。
+* **404**: 提示用户检查输入的大小写（AtCoder 官网不区分，但 API 区分）。
 
 
 
-### 4.2 修改 UI 布局
+### 4.2 添加新平台 (e.g., LeetCode)
 
-* 如果涉及**全局结构**（如侧边栏、Tab栏），修改 `src/App.tsx`。
-* 如果涉及**比赛列表样式**，修改 `src/components/ContestList.tsx`。
-* 如果涉及**刷题卡片内部逻辑**，修改 `src/components/PlatformCard.tsx`。
+1. **Cargo.toml**: 确认是否需要 `graphql` 或其他特性。
+2. **后端**: 在 `src-tauri/src/platforms/leetcode.rs` 实现 `fetch_user_stats`。
+3. **路由**: 在 `src-tauri/src/lib.rs` 的 `match` 中注册。
+4. **前端**: 在 `src/components/DashboardGrid.tsx` 将 `isEnabled` 设为 true。
 
-### 4.3 常见问题排查
+### 4.3 已知警告处理
 
-* **HDU 抓取为空**: 检查 `hdu.rs` 中的列索引（目前 Index 1=Name, Index 2=Time）。HDU 网页编码古老，若出现乱码需关注编码转换。
-* **Codeforces 统计失败**: CF API 有频率限制，如果频繁报错，可能需要增加重试机制或缓存。
+* **Snake Case Warnings**: Codeforces 的 JSON 字段是驼峰命名，导致 Rust 编译器报黄。可以通过在结构体上添加 `#[allow(non_snake_case)]` 消除警告。
 
 ---
 
 ## 5. 关键代码片段备份 (Key Code Snippets)
 
-### 5.1 用户统计并发抓取 (Rust Backend)
+### 5.1 开启 GZIP 支持 (Cargo.toml)
 
-*位置: `src-tauri/src/platforms/codeforces.rs*`
+*这是解决 Kenkoooo 403 错误的根本原因。*
+
+```toml
+[dependencies]
+reqwest = { version = "0.12", features = ["json", "gzip"] }
+
+```
+
+### 5.2 AtCoder 用户统计抓取 (Rust)
+
+*位置: `src-tauri/src/platforms/atcoder.rs*`
 
 ```rust
 pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        // 使用 Firefox UA 伪装
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0")
+        .build()?;
 
-    // 并发构建请求
-    let status_req = client
-        .get(CF_USER_STATUS_URL)
-        .query(&[("handle", handle), ("from", "1"), ("count", "10000")])
-        .send();
+    // 1. Kenkoooo AC Rank (注意：API 大小写敏感)
+    // 依赖 gzip feature 自动处理压缩，防止 403 和解析错误
+    let ac_url = format!("https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user={}", handle);
+    let ac_req = client.get(&ac_url)
+        .header("Accept", "application/json")
+        .header("Referer", "https://kenkoooo.com/");
+    
+    // ... (发送请求并解析) ...
 
-    let info_req = client
-        .get(CF_USER_INFO_URL)
-        .query(&[("handles", handle)])
-        .send();
-
-    // 并发执行
-    let (status_res, info_res) = tokio::join!(status_req, info_req);
-
-    // ... (处理 JSON 解析与去重逻辑)
-
-    Ok(UserStats {
-        platform: "Codeforces".to_string(),
-        handle: handle.to_string(),
-        solved_count: solved_problems.len() as u32, // 去重后的 AC 数
-        rank: user_info.rank.clone(),
-        rating: user_info.rating,
-    })
+    // 2. Profile Page Scraping (Rating)
+    // ... (HTML 解析逻辑) ...
 }
 
 ```
 
-### 5.2 平台卡片组件 (React Frontend)
+### 5.3 Rating 颜色逻辑 (TypeScript)
 
-*位置: `src/components/PlatformCard.tsx*`
+*位置: `src/utils.ts*`
 
-```tsx
-const PlatformCard = ({ platformName, platformKey, cardStyle, isEnabled = false }: PlatformCardProps) => {
-  // ... State management (handle, stats, loading)
+```typescript
+export const getRatingColor = (rating?: number, platform: string = 'codeforces'): string => {
+  if (!rating) return '#9ca3af'; 
+  const p = platform.toLowerCase();
 
-  const handleSearch = async () => {
-    // 调用 Tauri 指令 fetch_user_stats
-    const data = await fetchUserStats(platformKey, handle);
-    setStats(data);
-  };
-
-  return (
-    <div style={cardStyle} className="...">
-      {/* 顶部颜色条 */}
-      <div className="..." style={{ backgroundColor: getPlatformColor(platformName) }}></div>
-      
-      {/* 结果展示区 */}
-      {stats ? (
-        <div className="grid grid-cols-2 ...">
-           {/* Rating (带颜色) */}
-           <span style={{ color: getRatingColor(stats.rating) }}>{stats.rating}</span>
-           {/* Solved Count */}
-           <span>{stats.solved_count}</span>
-        </div>
-      ) : (
-        /* 输入框与搜索按钮 */
-      )}
-    </div>
-  );
+  // AtCoder 颜色阶梯
+  if (p === 'atcoder') {
+    if (rating < 400) return '#808080';   // Gray
+    if (rating < 800) return '#804000';   // Brown
+    if (rating < 1200) return '#008000';  // Green
+    if (rating < 1600) return '#00C0C0';  // Cyan
+    if (rating < 2000) return '#0000FF';  // Blue
+    if (rating < 2400) return '#C0C000';  // Yellow
+    if (rating < 2800) return '#FF8000';  // Orange
+    return '#FF0000';                     // Red
+  }
+  // ... Codeforces 逻辑 ...
 };
 
 ```
 
-### 5.3 HDU 修正后的过滤逻辑 (Rust Backend)
+---
 
-*位置: `src-tauri/src/platforms/hdu.rs*`
+## 6. 尚未解决的问题 (Pending Issues)
 
-```rust
-// ... (HTML 解析部分)
-// 5. 过滤与排序
-let now = Utc::now();
-
-// 过滤掉已经结束的比赛 (只保留未来的)
-contests.retain(|c| c.start_time > now);
-
-// 关键修正：按时间升序排列 (即将开始的在最前面)
-contests.sort_by(|a, b| a.start_time.cmp(&b.start_time));
-
-// 只保留最近的 5 场
-if contests.len() > 5 {
-    contests.truncate(5);
-}
-
-```
+1. **其他平台支持**: LeetCode, NowCoder, HDU 的 `fetch_user_stats` 尚未实现，目前点击卡片无反应或仅为 UI 占位。
+2. **Codeforces 编译警告**: `codeforces.rs` 中仍存在关于驼峰命名的编译器警告（不影响运行，但影响观感）。
+3. **Kenkoooo 稳定性**: 虽然目前通过模拟浏览器解决了拦截，但如果 Kenkoooo 升级 WAF 规则，可能需要更复杂的指纹伪装或切换到前端 Fetch 方案。
