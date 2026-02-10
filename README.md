@@ -1,4 +1,4 @@
-# CPC Helper (Contest App) 项目维护文档 v5.0
+# CPC Helper (Contest App) 项目维护文档 v1.0
 
 ## 1. 项目概述 (Project Overview)
 
