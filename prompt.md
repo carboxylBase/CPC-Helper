@@ -25,7 +25,7 @@
 如果我给你发过上个版本的项目文档, 你需要在上个文档的基础上编写. 这个总结性文档应当包含以下内容:
 + 项目名称 (作为标题)
 + 项目概述 (Project Overview)
-+ 目录结构 (Directory Structure)
++ 完整的目录结构 (Directory Structure)
 + 核心设计与实现细节 (Core Design & Implementation)
 + 维护指南 (Maintenance Guide)
 + 关键代码片段备份 (Key Code Snippets)

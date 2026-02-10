@@ -9,16 +9,16 @@ interface PlatformCardProps {
   platformKey: string;
   cardStyle: any;
   isEnabled?: boolean;
+  // [新增] 回调函数，用于将数据汇报给父组件
+  onStatsUpdate?: (platformKey: string, solvedCount: number) => void;
 }
 
-// 定义暴露给父组件的方法接口
 export interface PlatformCardRef {
   triggerSearch: () => Promise<void>;
 }
 
-// 使用 forwardRef 包裹组件
 const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
-  ({ platformName, platformKey, cardStyle, isEnabled = false }, ref) => {
+  ({ platformName, platformKey, cardStyle, isEnabled = false, onStatsUpdate }, ref) => {
     const [handle, setHandle] = useState('');
     const [stats, setStats] = useState<UserStats | null>(null);
     const [loading, setLoading] = useState(false);
@@ -27,6 +27,8 @@ const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
     useEffect(() => {
       const saved = localStorage.getItem(`cpc_handle_${platformKey}`);
       if (saved) setHandle(saved);
+      // 注意：这里我们暂时不在加载时自动汇报，只在查询成功时汇报
+      // 如果需要持久化图表，可能需要更复杂的逻辑，但目前符合你的"手动查询"逻辑
     }, [platformKey]);
 
     const handleSearch = async () => {
@@ -35,19 +37,28 @@ const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
       setLoading(true);
       setError(null);
       setStats(null);
+      // 重置该平台的图表数据（设为0），防止查询失败还显示旧数据
+      if (onStatsUpdate) onStatsUpdate(platformKey, 0);
+
       localStorage.setItem(`cpc_handle_${platformKey}`, handle);
 
       try {
         const data = await fetchUserStats(platformKey, handle);
         setStats(data);
+        
+        // [新增] 查询成功，汇报做题数
+        if (onStatsUpdate) {
+          onStatsUpdate(platformKey, data.solved_count || 0);
+        }
+
       } catch (err: any) {
         setError('Not Found');
+        // 失败时不汇报或汇报0，上面已经重置过了
       } finally {
         setLoading(false);
       }
     };
 
-    // 暴露方法给父组件
     useImperativeHandle(ref, () => ({
       triggerSearch: handleSearch
     }));

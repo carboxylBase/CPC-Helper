@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { hexToRgba } from './utils';
 import { SettingsIcon } from './components/Icons';
 import ContestList from './components/ContestList';
@@ -19,6 +19,10 @@ function App() {
   const [cardColor, setCardColor] = useState(DEFAULT_CONFIG.cardColor);
   const [cardOpacity, setCardOpacity] = useState(DEFAULT_CONFIG.cardOpacity);
 
+  // --- Animation Refs & State ---
+  const tabsRef = useRef<{ [key in Tab]?: HTMLButtonElement | null }>({});
+  const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
+
   useEffect(() => {
     const savedColor = localStorage.getItem('cpc_card_color');
     const savedOpacity = localStorage.getItem('cpc_card_opacity');
@@ -30,6 +34,17 @@ function App() {
     localStorage.setItem('cpc_card_color', cardColor);
     localStorage.setItem('cpc_card_opacity', cardOpacity.toString());
   }, [cardColor, cardOpacity]);
+
+  // --- Tab Animation Logic ---
+  useEffect(() => {
+    const currentTabElement = tabsRef.current[activeTab];
+    if (currentTabElement) {
+      setTabIndicatorStyle({
+        left: currentTabElement.offsetLeft,
+        width: currentTabElement.offsetWidth
+      });
+    }
+  }, [activeTab]);
 
   // Compute style once here and pass it down
   const cardStyle = {
@@ -68,33 +83,45 @@ function App() {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex gap-4 mb-6 border-b border-white/10 pb-2">
+          <div className="relative flex gap-6 mb-6 border-b border-white/10 pb-0">
             <button
+              ref={(el) => { tabsRef.current['contests'] = el; }}
               onClick={() => setActiveTab('contests')}
-              className={`pb-2 px-1 text-sm font-medium transition-colors relative ${
+              className={`pb-3 px-2 text-sm font-medium transition-colors ${
                 activeTab === 'contests' ? 'text-blue-400' : 'text-gray-400 hover:text-white'
               }`}
             >
               Contest Calendar
-              {activeTab === 'contests' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-400 rounded-t-full" />}
             </button>
             <button
+              ref={(el) => { tabsRef.current['profile'] = el; }}
               onClick={() => setActiveTab('profile')}
-              className={`pb-2 px-1 text-sm font-medium transition-colors relative ${
+              className={`pb-3 px-2 text-sm font-medium transition-colors ${
                 activeTab === 'profile' ? 'text-blue-400' : 'text-gray-400 hover:text-white'
               }`}
             >
               My Stats Dashboard
-              {activeTab === 'profile' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-400 rounded-t-full" />}
             </button>
+
+            {/* Sliding Blue Bar */}
+            <div 
+              className="absolute bottom-0 h-0.5 bg-blue-400 rounded-t-full transition-all duration-300 ease-[cubic-bezier(0.25,0.8,0.25,1)]"
+              style={{ 
+                left: tabIndicatorStyle.left, 
+                width: tabIndicatorStyle.width 
+              }}
+            />
           </div>
 
-          {/* === Main Content Area === */}
-          {activeTab === 'contests' ? (
+          {/* === Main Content Area (Modified for Persistence) === */}
+          
+          <div style={{ display: activeTab === 'contests' ? 'block' : 'none' }}>
             <ContestList cardStyle={cardStyle} />
-          ) : (
+          </div>
+
+          <div style={{ display: activeTab === 'profile' ? 'block' : 'none' }}>
             <DashboardGrid cardStyle={cardStyle} />
-          )}
+          </div>
 
         </div>
       </div>
