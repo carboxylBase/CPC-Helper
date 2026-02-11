@@ -9,19 +9,21 @@ mod platforms {
     pub mod leetcode;
     pub mod hdu;
     pub mod luogu;
+    pub mod daimayuan; // [已注册]
 }
 
 #[tauri::command]
 async fn fetch_all_contests() -> Result<Vec<Contest>, String> {
     // 并发执行所有平台的抓取任务
-    // [修改]: 加入 platforms::luogu::fetch_contests()
-    let (cf_res, ac_res, nc_res, lc_res, hdu_res, lg_res) = tokio::join!(
+    // 目前包含: CF, AtCoder, NowCoder, LeetCode, HDU, Luogu, Daimayuan (共7个)
+    let (cf_res, ac_res, nc_res, lc_res, hdu_res, lg_res, dmy_res) = tokio::join!(
         platforms::codeforces::fetch_contests(),
         platforms::atcoder::fetch_contests(),
         platforms::nowcoder::fetch_contests(),
         platforms::leetcode::fetch_contests(),
         platforms::hdu::fetch_contests(),
-        platforms::luogu::fetch_contests()
+        platforms::luogu::fetch_contests(),
+        platforms::daimayuan::fetch_contests()
     );
 
     let mut all_contests = Vec::new();
@@ -32,8 +34,8 @@ async fn fetch_all_contests() -> Result<Vec<Contest>, String> {
     if let Ok(c) = nc_res { all_contests.extend(c); }
     if let Ok(c) = lc_res { all_contests.extend(c); }
     if let Ok(c) = hdu_res { all_contests.extend(c); }
-    // [新增]: 聚合洛谷比赛
     if let Ok(c) = lg_res { all_contests.extend(c); }
+    if let Ok(c) = dmy_res { all_contests.extend(c); }
 
     // 统一按开始时间排序
     all_contests.sort_by(|a, b| a.start_time.cmp(&b.start_time));
@@ -72,6 +74,11 @@ async fn fetch_user_stats(platform: String, handle: String, cookie: Option<Strin
             },
             "luogu" => {
                 platforms::luogu::fetch_user_stats(&handle)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            "daimayuan" => { // [新增]: 分发至代码源查询逻辑
+                platforms::daimayuan::fetch_user_stats(&handle)
                     .await
                     .map_err(|e| e.to_string())
             },

@@ -1,18 +1,22 @@
-// 平台颜色映射
+// 平台颜色映射 - 采用“赤橙黄绿青蓝紫”光谱方案
 export const getPlatformColor = (platform: string): string => {
   switch (platform.toLowerCase()) {
-    case 'codeforces':
-      return '#3182ce'; // Blue-600
-    case 'atcoder':
-      return '#d69e2e'; // AtCoder logo uses black/white, but let's use Dark Gray for card header
-    case 'nowcoder':
-      return '#16a34a'; // Green-600
-    case 'leetcode':
-      return '#d97706'; // Amber-600
     case 'hdu':
-      return '#e53e3e'; // Red-600
+      return '#ef4444'; // 赤 (Red-500)
+    case 'leetcode':
+      return '#f97316'; // 橙 (Orange-500)
+    case 'atcoder':
+      return '#eab308'; // 黄 (Yellow-500)
+    case 'nowcoder':
+      return '#22c55e'; // 绿 (Green-500)
+    case 'luogu':
+      return '#06b6d4'; // 青 (Cyan-500)
+    case 'codeforces':
+      return '#3b82f6'; // 蓝 (Blue-500)
+    case 'daimayuan':
+      return '#8b5cf6'; // 紫 (Purple-500)
     default:
-      return '#718096'; // Gray-600
+      return '#94a3b8'; // 默认 (Slate-400)
   }
 };
 
@@ -45,7 +49,7 @@ export const formatDate = (isoString: string): string => {
   return `${month}-${day}`;
 };
 
-// [更新] 获取 Rating 颜色，支持多平台
+// [更新] 获取 Rating 颜色，保持竞赛等级标准颜色不变
 export const getRatingColor = (rating?: number, platform: string = 'codeforces'): string => {
   if (!rating) return '#9ca3af'; // gray-400 (Unrated)
 
@@ -63,7 +67,7 @@ export const getRatingColor = (rating?: number, platform: string = 'codeforces')
     return '#FF0000';                     // Red
   }
 
-  // NowCoder 颜色逻辑 (参考: 灰 <1200, 蓝 <1500, 绿 <2200, 金 <2600, 红 >2600)
+  // NowCoder 颜色逻辑
   if (p === 'nowcoder') {
     if (rating < 1200) return '#9ca3af'; // Gray
     if (rating < 1500) return '#3b82f6'; // Blue
@@ -72,7 +76,7 @@ export const getRatingColor = (rating?: number, platform: string = 'codeforces')
     return '#ef4444';                    // Red
   }
 
-  // Codeforces 颜色逻辑 (默认)
+  // Codeforces / Daimayuan 颜色逻辑
   if (rating < 1200) return '#9ca3af'; // Gray (Newbie)
   if (rating < 1400) return '#22c55e'; // Green (Pupil)
   if (rating < 1600) return '#06b6d4'; // Cyan (Specialist)
