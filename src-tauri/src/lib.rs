@@ -107,6 +107,9 @@ async fn fetch_user_stats(platform: String, handle: String, cookie: Option<Strin
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        // [新增] 注册更新插件
+        // 注意：这会自动读取 tauri.conf.json 中的 updater 配置
+        .plugin(tauri_plugin_updater::Builder::new().build()) 
         .invoke_handler(tauri::generate_handler![
             fetch_all_contests,
             fetch_user_stats

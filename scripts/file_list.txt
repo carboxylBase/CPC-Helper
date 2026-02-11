@@ -1,2 +1,1 @@
-src/components/DashboardGrid.tsx
-src/components/PlatformCard.tsx
+src-tauri/src/lib.rs

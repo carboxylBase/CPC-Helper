@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "cpc-helper",
-  "version": "0.1.0",
+  "version": "1.1.1",
   "identifier": "com.huangzhiyuan.cpc-helper",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -31,5 +31,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlCN0QxQjkxM0Q1QUQxMDUKUldRRjBWbzlrUnQ5bTVlcmxnRVFSR3BJNU5va2tnZ3JxMlRoa2JOby9YMk1vQVhDRStvaThSNG4K",
+      "endpoints": [
+        "https://github.com/carboxylBase/CPC-Helper/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
