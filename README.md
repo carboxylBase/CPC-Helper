@@ -38,15 +38,11 @@
 - **OTA 自动更新**：基于 GitHub Releases 的增量更新机制，软件启动即自动检测新版本，无感升级。
 
 ---
-
 ## 📸 预览 (Screenshots)
-
-> *（建议在此处放两张截图：一张是 Dashboard 战绩页面，一张是 Contest 列表页面）*
 
 | 战绩仪表盘 (Dashboard) | 比赛日程 (Calendar) |
 | :---: | :---: |
-| ![Dashboard Screenshot](https://via.placeholder.com/600x400?text=Dashboard+Screenshot) | ![Contest List Screenshot](https://via.placeholder.com/600x400?text=Contest+List+Screenshot) |
-
+| <img src=".github/assets/dashboard.png" height="300" alt="Dashboard Screenshot"> | <img src=".github/assets/calendar.png" height="300" alt="Contest List Screenshot"> |
 ---
 
 ## 📥 下载安装 (Installation)
