@@ -1,15 +1,15 @@
-use anyhow::Result;
 use crate::models::{Contest, UserStats};
+use anyhow::Result;
 
 mod models;
 mod platforms {
-    pub mod codeforces;
     pub mod atcoder;
-    pub mod nowcoder;
-    pub mod leetcode;
+    pub mod codeforces;
+    pub mod daimayuan;
     pub mod hdu;
+    pub mod leetcode;
     pub mod luogu;
-    pub mod daimayuan; // [已注册]
+    pub mod nowcoder; // [已注册]
 }
 
 #[tauri::command]
@@ -29,13 +29,27 @@ async fn fetch_all_contests() -> Result<Vec<Contest>, String> {
     let mut all_contests = Vec::new();
 
     // 聚合结果，忽略单个平台的失败
-    if let Ok(c) = cf_res { all_contests.extend(c); }
-    if let Ok(c) = ac_res { all_contests.extend(c); }
-    if let Ok(c) = nc_res { all_contests.extend(c); }
-    if let Ok(c) = lc_res { all_contests.extend(c); }
-    if let Ok(c) = hdu_res { all_contests.extend(c); }
-    if let Ok(c) = lg_res { all_contests.extend(c); }
-    if let Ok(c) = dmy_res { all_contests.extend(c); }
+    if let Ok(c) = cf_res {
+        all_contests.extend(c);
+    }
+    if let Ok(c) = ac_res {
+        all_contests.extend(c);
+    }
+    if let Ok(c) = nc_res {
+        all_contests.extend(c);
+    }
+    if let Ok(c) = lc_res {
+        all_contests.extend(c);
+    }
+    if let Ok(c) = hdu_res {
+        all_contests.extend(c);
+    }
+    if let Ok(c) = lg_res {
+        all_contests.extend(c);
+    }
+    if let Ok(c) = dmy_res {
+        all_contests.extend(c);
+    }
 
     // 统一按开始时间排序
     all_contests.sort_by(|a, b| a.start_time.cmp(&b.start_time));
@@ -44,44 +58,41 @@ async fn fetch_all_contests() -> Result<Vec<Contest>, String> {
 }
 
 #[tauri::command]
-async fn fetch_user_stats(platform: String, handle: String, cookie: Option<String>) -> Result<UserStats, String> {
+async fn fetch_user_stats(
+    platform: String,
+    handle: String,
+    cookie: Option<String>,
+) -> Result<UserStats, String> {
     let max_retries = 3;
     let mut last_error = String::new();
 
     for attempt in 1..=max_retries {
         // 根据平台分发请求
         let res = match platform.to_lowercase().as_str() {
-            "codeforces" => {
-                platforms::codeforces::fetch_user_stats(&handle)
-                    .await
-                    .map_err(|e| e.to_string())
-            },
-            "atcoder" => {
-                platforms::atcoder::fetch_user_stats(&handle)
-                    .await
-                    .map_err(|e| e.to_string())
-            },
+            "codeforces" => platforms::codeforces::fetch_user_stats(&handle)
+                .await
+                .map_err(|e| e.to_string()),
+            "atcoder" => platforms::atcoder::fetch_user_stats(&handle)
+                .await
+                .map_err(|e| e.to_string()),
             "nowcoder" => {
                 let user_cookie = cookie.as_deref().unwrap_or("");
                 platforms::nowcoder::fetch_user_stats(&handle, user_cookie)
                     .await
                     .map_err(|e| e.to_string())
-            },
-            "leetcode" => {
-                platforms::leetcode::fetch_user_stats(&handle)
-                    .await
-                    .map_err(|e| e.to_string())
-            },
-            "luogu" => {
-                platforms::luogu::fetch_user_stats(&handle)
-                    .await
-                    .map_err(|e| e.to_string())
-            },
-            "daimayuan" => { // [新增]: 分发至代码源查询逻辑
+            }
+            "leetcode" => platforms::leetcode::fetch_user_stats(&handle)
+                .await
+                .map_err(|e| e.to_string()),
+            "luogu" => platforms::luogu::fetch_user_stats(&handle)
+                .await
+                .map_err(|e| e.to_string()),
+            "daimayuan" => {
+                // [新增]: 分发至代码源查询逻辑
                 platforms::daimayuan::fetch_user_stats(&handle)
                     .await
                     .map_err(|e| e.to_string())
-            },
+            }
             _ => Err(format!("Platform '{}' not supported yet", platform)),
         };
 
@@ -106,10 +117,12 @@ async fn fetch_user_stats(platform: String, handle: String, cookie: Option<Strin
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         // [新增] 注册更新插件
         // 注意：这会自动读取 tauri.conf.json 中的 updater 配置
-        .plugin(tauri_plugin_updater::Builder::new().build()) 
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             fetch_all_contests,
             fetch_user_stats

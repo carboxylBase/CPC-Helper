@@ -5,6 +5,11 @@ import ContestList from './components/ContestList';
 import DashboardGrid from './components/DashboardGrid';
 import SettingsDrawer from './components/SettingsDrawer';
 
+// [新增]: 引入 Tauri 插件用于检查更新、弹窗和重启
+import { check } from '@tauri-apps/plugin-updater';
+import { ask } from '@tauri-apps/plugin-dialog';
+import { relaunch } from '@tauri-apps/plugin-process';
+
 const DEFAULT_CONFIG = {
   cardColor: '#1f2937', 
   cardOpacity: 0.6,
@@ -22,6 +27,38 @@ function App() {
   // --- Animation Refs & State ---
   const tabsRef = useRef<{ [key in Tab]?: HTMLButtonElement | null }>({});
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
+
+  // --- [新增]: 自动检查更新逻辑 ---
+  useEffect(() => {
+    const initCheckUpdate = async () => {
+      try {
+        const update = await check();
+        if (update?.available) {
+          // 发现新版本，弹出原生对话框询问
+          const yes = await ask(
+            `Discover new version v${update.version}!\n\nRelease Notes:\n${update.body}`, 
+            {
+              title: 'Update Available',
+              kind: 'info',
+              okLabel: 'Update Now',
+              cancelLabel: 'Later'
+            }
+          );
+
+          if (yes) {
+            // 用户点击确认，开始下载并安装
+            await update.downloadAndInstall();
+            // 安装完成后重启应用
+            await relaunch();
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check for updates:', error);
+      }
+    };
+
+    initCheckUpdate();
+  }, []);
 
   useEffect(() => {
     const savedColor = localStorage.getItem('cpc_card_color');

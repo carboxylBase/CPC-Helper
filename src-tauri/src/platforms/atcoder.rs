@@ -19,14 +19,15 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
         .build()?;
 
-    let resp = client.get(url)
+    let resp = client
+        .get(url)
         .header(header::ACCEPT_LANGUAGE, "en-US,en;q=0.9")
         .send()
         .await?;
 
     let html_content = resp.text().await?;
     let document = Html::parse_document(&html_content);
-    
+
     let table_selector = Selector::parse("#contest-table-upcoming tbody tr").unwrap();
     let time_selector = Selector::parse("td:nth-child(1) time").unwrap();
     let link_selector = Selector::parse("td:nth-child(2) a").unwrap();
@@ -36,7 +37,7 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
     for row in document.select(&table_selector) {
         let start_time_str = match row.select(&time_selector).next() {
             Some(el) => el.inner_html(),
-            None => continue, 
+            None => continue,
         };
 
         let start_time = DateTime::parse_from_str(&start_time_str, "%Y-%m-%d %H:%M:%S%z")
@@ -68,19 +69,25 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
 pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
     let client = reqwest::Client::builder()
         // 使用 Firefox UA
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0")
+        .user_agent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0",
+        )
         .build()?;
 
     // ---------------------------------------------------------
     // 第一步：请求 Kenkoooo (ac_rank)
     // ---------------------------------------------------------
-    let ac_url = format!("https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user={}", handle);
-    
-    let ac_req = client.get(&ac_url)
+    let ac_url = format!(
+        "https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user={}",
+        handle
+    );
+
+    let ac_req = client
+        .get(&ac_url)
         .header("Accept", "application/json")
         .header("Accept-Language", "en-US,en;q=0.5")
         .header("Referer", "https://kenkoooo.com/");
-    
+
     let solved_count = match ac_req.send().await {
         Ok(resp) => {
             if resp.status().is_success() {
@@ -91,7 +98,7 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
             } else {
                 0 // 403/404 等错误静默处理
             }
-        },
+        }
         Err(_) => 0, // 网络错误静默处理
     };
 
@@ -99,8 +106,10 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
     // 第二步：请求 AtCoder Profile (Rating)
     // ---------------------------------------------------------
     let profile_url = format!("https://atcoder.jp/users/{}", handle);
-    let profile_req = client.get(&profile_url)
-         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+    let profile_req = client.get(&profile_url).header(
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    );
 
     let mut rating: Option<u32> = None;
     let mut rank_str: Option<String> = None;
@@ -112,7 +121,7 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
                 let tr_selector = Selector::parse("tr").unwrap();
                 let th_selector = Selector::parse("th").unwrap();
                 let td_selector = Selector::parse("td").unwrap();
-                
+
                 for row in document.select(&tr_selector) {
                     if let Some(th) = row.select(&th_selector).next() {
                         let header_text = th.text().collect::<String>();

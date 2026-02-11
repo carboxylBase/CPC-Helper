@@ -16,14 +16,14 @@ const LEETCODE_CN_GRAPHQL_URL: &str = "https://leetcode.cn/graphql";
 struct GraphQlResponse {
     data: Option<Data>,
     #[allow(dead_code)]
-    errors: Option<Vec<serde_json::Value>>, 
+    errors: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Deserialize, Debug)]
 struct Data {
     #[serde(rename = "upcomingContests")]
     upcoming_contests: Option<Vec<RawContest>>,
-    
+
     // UserStats
     #[serde(rename = "userContestRanking")]
     user_contest_ranking: Option<UserContestRanking>,
@@ -82,12 +82,15 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
         .await?;
 
     let graphql_resp: GraphQlResponse = resp.json().await?;
-    let data = graphql_resp.data.ok_or_else(|| anyhow::anyhow!("LeetCode response missing 'data' field"))?;
+    let data = graphql_resp
+        .data
+        .ok_or_else(|| anyhow::anyhow!("LeetCode response missing 'data' field"))?;
     let mut contests = Vec::new();
 
     for raw in data.upcoming_contests.unwrap_or_default() {
-        let start_time = DateTime::from_timestamp(raw.start_time, 0)
-            .ok_or_else(|| anyhow::anyhow!("Invalid timestamp from LeetCode: {}", raw.start_time))?;
+        let start_time = DateTime::from_timestamp(raw.start_time, 0).ok_or_else(|| {
+            anyhow::anyhow!("Invalid timestamp from LeetCode: {}", raw.start_time)
+        })?;
 
         contests.push(Contest {
             name: raw.title,
@@ -152,18 +155,18 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
 
     // 4. 解析 Rating
     let mut rating_val: Option<u32> = None;
-    
+
     // 如果请求失败，这里不直接返回 Err，而是尝试解析另一个结果，尽可能返回部分数据
     // 但如果两个都失败，最后可能会返回全空数据，或者你可以选择在这里抛出错误触发重试
     if let Ok(resp) = rating_resp {
         if resp.status().is_success() {
-             if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
-                 if let Some(d) = g_resp.data {
-                     if let Some(ranking) = d.user_contest_ranking {
-                         rating_val = Some(ranking.rating.round() as u32);
-                     }
-                 }
-             }
+            if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
+                if let Some(d) = g_resp.data {
+                    if let Some(ranking) = d.user_contest_ranking {
+                        rating_val = Some(ranking.rating.round() as u32);
+                    }
+                }
+            }
         }
     }
 
@@ -171,13 +174,17 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
     let mut solved_count: u32 = 0;
     if let Ok(resp) = solved_resp {
         if resp.status().is_success() {
-             if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
-                 if let Some(d) = g_resp.data {
-                     if let Some(progress) = d.user_question_progress {
-                         solved_count = progress.num_accepted_questions.iter().map(|q| q.count).sum();
-                     }
-                 }
-             }
+            if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
+                if let Some(d) = g_resp.data {
+                    if let Some(progress) = d.user_question_progress {
+                        solved_count = progress
+                            .num_accepted_questions
+                            .iter()
+                            .map(|q| q.count)
+                            .sum();
+                    }
+                }
+            }
         }
     }
 
@@ -190,7 +197,7 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
         platform: "LeetCode".to_string(),
         handle: handle.to_string(),
         solved_count,
-        rank: None, 
+        rank: None,
         rating: rating_val,
     })
 }

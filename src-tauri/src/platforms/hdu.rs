@@ -1,7 +1,7 @@
 use crate::models::Contest;
 use anyhow::Result;
+use chrono::{FixedOffset, NaiveDateTime, TimeZone, Utc};
 use scraper::{Html, Selector};
-use chrono::{NaiveDateTime, TimeZone, FixedOffset, Utc};
 
 // HDU 列表地址
 const HDU_URL: &str = "https://acm.hdu.edu.cn/contests/contest_list.php";
@@ -27,7 +27,7 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
     // 3. 解析表格
     for row in document.select(&row_selector) {
         let tds: Vec<_> = row.select(&td_selector).collect();
-        
+
         // 至少需要有 ID, Name, Date 这几列
         if tds.len() < 3 {
             continue;
@@ -38,10 +38,16 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
             Some(el) => el,
             None => continue,
         };
-        let raw_name = name_el.text().collect::<Vec<_>>().join("").trim().to_string();
+        let raw_name = name_el
+            .text()
+            .collect::<Vec<_>>()
+            .join("")
+            .trim()
+            .to_string();
 
         // 过滤无效行
-        if raw_name.is_empty() || raw_name == "Problem Archive" || raw_name.contains("Contest Name") {
+        if raw_name.is_empty() || raw_name == "Problem Archive" || raw_name.contains("Contest Name")
+        {
             continue;
         }
 
@@ -49,10 +55,12 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
         let url = match name_el.select(&link_selector).next() {
             Some(a) => {
                 let href = a.value().attr("href").unwrap_or("");
-                if href.is_empty() { continue; }
+                if href.is_empty() {
+                    continue;
+                }
                 format!("{}{}", HDU_BASE_URL, href)
-            },
-            None => continue, 
+            }
+            None => continue,
         };
 
         // 提取时间 (Index 2)
@@ -69,7 +77,7 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
                     Some(local_dt) => local_dt.with_timezone(&Utc),
                     None => continue,
                 }
-            },
+            }
             Err(_) => continue, // 解析失败直接跳过
         };
 
@@ -83,7 +91,7 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
 
     // 5. 过滤与排序
     let now = Utc::now();
-    
+
     // 过滤掉已经结束的比赛 (只保留未来的)
     contests.retain(|c| c.start_time > now);
 

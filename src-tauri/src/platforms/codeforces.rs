@@ -23,7 +23,7 @@ struct CfContest {
     name: String,
     phase: String,
     // JSON 中是 startTimeSeconds, 这里映射为 start_time_seconds
-    start_time_seconds: Option<i64>, 
+    start_time_seconds: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -69,7 +69,11 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()?;
 
-    let res = client.get(CF_API_URL).query(&[("gym", "false")]).send().await?;
+    let res = client
+        .get(CF_API_URL)
+        .query(&[("gym", "false")])
+        .send()
+        .await?;
     let cf_res: CfResponse = res.json().await?;
 
     if cf_res.status != "OK" {
@@ -142,7 +146,7 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
     if info_resp.status != "OK" || info_resp.result.is_empty() {
         return Err(anyhow::anyhow!("Failed to fetch user info"));
     }
-    
+
     let user_info = &info_resp.result[0];
 
     Ok(UserStats {
