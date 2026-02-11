@@ -30,7 +30,7 @@ const PopOutActiveSector = (props: any) => {
   const RADIAN = Math.PI / 180;
   const sin = Math.sin(-RADIAN * midAngle);
   const cos = Math.cos(-RADIAN * midAngle);
-  
+   
   const mx = 12 * cos;
   const my = 12 * sin;
 
@@ -88,8 +88,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   const hduRef = useRef<PlatformCardRef>(null);
 
   // UI State
-  const [isGlobalRefreshing] = useState(false); // 修改：移除 setIsGlobalRefreshing 的未使用警告（可选）
-  const [setIsGlobalRefreshingState] = useState(false); // 仅为保持 handleRefreshAll 逻辑
+  // [修复]: 移除了之前导致 CI 构建失败的未使用变量 (isGlobalRefreshing, setIsGlobalRefreshingState)
   const [solvedStats, setSolvedStats] = useState<Record<string, number>>({});
   const [activeIndex, setActiveIndex] = useState<number>(-1);
 
@@ -162,9 +161,9 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
   };
-  
+   
   const onPieLeave = () => {
-     setActiveIndex(-1);
+      setActiveIndex(-1);
   };
 
   const CustomTooltip = ({ active, payload }: any) => {
@@ -188,7 +187,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
 
   return (
     <div className="animate-fade-in pb-20">
-      
+       
       {/* 头部控制区 */}
       <div className="flex justify-between items-center mb-6 px-1">
         <h2 className="text-xl font-bold text-white/90 tracking-tight">我的战绩</h2>
@@ -350,9 +349,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           </div>
         </div>
       </div>
-
     </div>
   );
 };
-
 export default DashboardGrid;
