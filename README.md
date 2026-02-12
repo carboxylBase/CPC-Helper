@@ -61,7 +61,7 @@
 
 ## 🛠️ 本地开发 (Development)
 
-如果你对本项目感兴趣，欢迎 clone 代码进行二次开发。
+如果你对本项目感兴趣，欢迎 clone 代码进行二次开发
 
 ### 前置要求
 - [Node.js](https://nodejs.org/) (建议 LTS 版本)
