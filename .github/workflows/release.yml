@@ -36,29 +36,13 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
-      # 调试步骤保留，以防万一
-      - name: Debug Key Availability
-        shell: bash
-        env:
-          MY_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          if [ -z "$MY_KEY" ]; then
-            echo "❌ CRITICAL ERROR: Key is empty!"
-            exit 1
-          else
-            echo "✅ Key detected. Length: ${#MY_KEY}"
-            if [[ "$MY_KEY" == *"encrypted secret key"* ]]; then
-               echo "ℹ️ Note: Key is ENCRYPTED. Password variable is required (even if empty)."
-            fi
-          fi
-
+      # 核心构建步骤
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 必须同时提供私钥和密码
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          # 关键修正：显式传入空字符串作为密码
-          # 这样 Tauri 就能用“空密码”去解密那个“encrypted”的私钥了
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: 'CPC Helper v__VERSION__'
@@ -84,12 +68,15 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+
+            // 1. 获取版本信息
             const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             const version = packageJson.version;
             const tagName = `v${version}`;
             
             console.log(`Processing update manifest for: ${tagName}`);
 
+            // 2. 获取 Release 资产信息
             const releases = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -107,9 +94,10 @@ jobs:
             release.assets.forEach(a => console.log(` - ${a.name} (${(a.size/1024/1024).toFixed(2)} MB)`));
             console.log("---------------------------------------------------");
 
+            // 3. 删除可能存在的旧 latest.json
             const existingManifest = release.assets.find(a => a.name === 'latest.json');
             if (existingManifest) {
-              console.log(`Deleting existing latest.json...`);
+              console.log(`Deleting existing latest.json (id: ${existingManifest.id})...`);
               await github.rest.repos.deleteReleaseAsset({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -124,30 +112,43 @@ jobs:
               platforms: {}
             };
 
+            // 4. 平台匹配逻辑
             function getPlatformKeys(filename) {
               const lower = filename.toLowerCase();
-              if (lower.endsWith('.app.tar.gz')) return lower.includes('aarch64') ? ['darwin-aarch64'] : ['darwin-x86_64'];
-              if (lower.endsWith('.appimage.tar.gz') || lower.endsWith('.appimage')) return ['linux-x86_64'];
-              if (lower.endsWith('.msi.zip') || lower.endsWith('.exe') || lower.endsWith('.nsis.zip')) return ['windows-x86_64', 'windows-x86_64-nsis'];
+              if (lower.endsWith('.app.tar.gz')) {
+                return lower.includes('aarch64') ? ['darwin-aarch64'] : ['darwin-x86_64'];
+              }
+              if (lower.endsWith('.appimage.tar.gz') || lower.endsWith('.appimage')) {
+                return ['linux-x86_64'];
+              }
+              if (lower.endsWith('.msi.zip') || lower.endsWith('.exe') || lower.endsWith('.nsis.zip')) {
+                return ['windows-x86_64', 'windows-x86_64-nsis'];
+              }
               return [];
             }
 
             const assets = release.assets;
             let foundSig = false;
 
+            // 5. 遍历资产，寻找签名文件
             for (const asset of assets) {
               if (asset.name.endsWith('.sig')) {
                 foundSig = true;
-                const binaryName = asset.name.slice(0, -4);
+                const binaryName = asset.name.slice(0, -4); // 去掉 .sig
                 const binaryAsset = assets.find(a => a.name === binaryName);
                 
                 if (binaryAsset) {
                   const keys = getPlatformKeys(binaryName);
                   if (keys.length > 0) {
-                    console.log(`[Success] Matched: ${binaryName}`);
+                    console.log(`[Success] Matched: ${binaryName} -> Keys: ${keys.join(', ')}`);
+                    
                     const signature = await fetch(asset.browser_download_url).then(res => res.text());
+                    
                     for (const key of keys) {
-                      updateData.platforms[key] = { signature: signature.trim(), url: binaryAsset.browser_download_url };
+                      updateData.platforms[key] = {
+                        signature: signature.trim(),
+                        url: binaryAsset.browser_download_url
+                      };
                     }
                   }
                 }
@@ -156,10 +157,13 @@ jobs:
 
             if (!foundSig) {
               console.log("❌ ERROR: Still no .sig files found.");
-              core.setFailed("No signatures found.");
+              console.log("👉 This usually means the 'publish-tauri' step failed to sign the binaries.");
+              console.log("👉 Check if TAURI_SIGNING_PRIVATE_KEY_PASSWORD matches the key.");
+              core.setFailed("No signatures found. Update manifest generation aborted.");
               return;
             }
 
+            // 6. 写入并上传
             console.log("Final Manifest content:", JSON.stringify(updateData, null, 2));
             fs.writeFileSync('latest.json', JSON.stringify(updateData, null, 2));
 
