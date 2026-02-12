@@ -1,1 +1,1 @@
-src/App.tsx
+.github/workflows/release.yml

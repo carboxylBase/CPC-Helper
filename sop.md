@@ -81,7 +81,7 @@ git push origin v1.1.2
 
 ### 附：更新日志模板 (Copy & Paste)
 
-没有的项可以忽略
+没有的项可以忽略, 你的回答应该只包括更新日志本身
 
 ```markdown
 # CPC Helper v1.1.2 更新日志

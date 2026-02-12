@@ -66,7 +66,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            
+
             // 1. 获取版本信息
             const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             const version = packageJson.version;
@@ -79,6 +79,8 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
+            
+            // 找到对应的 Release（即使是 Draft）
             const release = releases.data.find(r => r.tag_name === tagName);
             
             if (!release) {
@@ -86,13 +88,16 @@ jobs:
               return;
             }
 
-            // [调试日志] 打印当前 Release 里的所有文件
-            console.log("Current assets in release:", release.assets.map(a => a.name));
+            // [调试日志] 打印当前 Release 里的所有文件，帮助排查
+            console.log("---------------------------------------------------");
+            console.log("Current assets in release:");
+            release.assets.forEach(a => console.log(` - ${a.name} (${(a.size/1024/1024).toFixed(2)} MB)`));
+            console.log("---------------------------------------------------");
 
-            // 3. [关键修复] 检查并删除已存在的 latest.json，防止 'already_exists' 报错
+            // 3. 删除旧的 latest.json 防止冲突
             const existingManifest = release.assets.find(a => a.name === 'latest.json');
             if (existingManifest) {
-              console.log(`Deleting existing latest.json (id: ${existingManifest.id}) to avoid conflict...`);
+              console.log(`Deleting existing latest.json (id: ${existingManifest.id})...`);
               await github.rest.repos.deleteReleaseAsset({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -107,26 +112,33 @@ jobs:
               platforms: {}
             };
 
-            // 4. 平台匹配逻辑：支持 Windows 多 Key
+            // 4. 平台匹配逻辑 (根据你提供的文件名进行优化)
             function getPlatformKeys(filename) {
               const lower = filename.toLowerCase();
+              
+              // macOS: cpc-helper_aarch64.app.tar.gz
               if (lower.endsWith('.app.tar.gz')) {
                 return lower.includes('aarch64') ? ['darwin-aarch64'] : ['darwin-x86_64'];
               }
+              
+              // Linux: cpc-helper_1.2.6_amd64.AppImage
               if (lower.endsWith('.appimage.tar.gz') || lower.endsWith('.appimage')) {
                 return ['linux-x86_64'];
               }
-              // 关键：同时匹配 exe 和 nsis.zip，并生成两个 key
-              if (lower.endsWith('.msi.zip') || lower.endsWith('.exe') || lower.endsWith('.nsis.zip')) {
+              
+              // Windows: cpc-helper_1.2.6_x64-setup.exe
+              // 同时匹配 .exe 和 .nsis.zip 以防万一
+              if (lower.endsWith('.exe') || lower.endsWith('.nsis.zip')) {
                 return ['windows-x86_64', 'windows-x86_64-nsis'];
               }
+
               return [];
             }
 
             const assets = release.assets;
             let foundSig = false;
 
-            // 5. 遍历资产，下载签名并填充 JSON
+            // 5. 遍历资产，必须找到 .sig 文件
             for (const asset of assets) {
               if (asset.name.endsWith('.sig')) {
                 foundSig = true;
@@ -136,24 +148,35 @@ jobs:
                 if (binaryAsset) {
                   const keys = getPlatformKeys(binaryName);
                   if (keys.length > 0) {
-                    // console.log(`[Match] ${binaryName} -> ${keys.join(', ')}`);
+                    console.log(`[Success] Matched: ${binaryName} -> Keys: ${keys.join(', ')}`);
+                    
+                    // 下载签名内容
                     const signature = await fetch(asset.browser_download_url).then(res => res.text());
+                    
                     for (const key of keys) {
                       updateData.platforms[key] = {
                         signature: signature.trim(),
                         url: binaryAsset.browser_download_url
                       };
                     }
+                  } else {
+                    console.log(`[Skipped] Found pair but no platform match: ${binaryName}`);
                   }
+                } else {
+                  console.log(`[Warning] Found signature ${asset.name} but binary ${binaryName} is missing.`);
                 }
               }
             }
 
+            // 6. 如果没有找到任何签名文件，直接报错，避免生成空的 latest.json
             if (!foundSig) {
-              console.log("⚠️ No .sig files found! Updates will fail if binaries are not signed.");
+              console.log("❌ ERROR: No .sig files found in the release assets!");
+              console.log("👉 Check your 'TAURI_SIGNING_PRIVATE_KEY' in GitHub Secrets.");
+              core.setFailed("No signatures found. Update manifest generation aborted.");
+              return;
             }
 
-            // 6. 写入文件并上传
+            // 7. 写入并上传
             console.log("Final Manifest content:", JSON.stringify(updateData, null, 2));
             fs.writeFileSync('latest.json', JSON.stringify(updateData, null, 2));
 
