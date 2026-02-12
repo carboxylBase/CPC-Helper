@@ -30,7 +30,7 @@ const PopOutActiveSector = (props: any) => {
   const RADIAN = Math.PI / 180;
   const sin = Math.sin(-RADIAN * midAngle);
   const cos = Math.cos(-RADIAN * midAngle);
-   
+    
   const mx = 12 * cos;
   const my = 12 * sin;
 
@@ -84,11 +84,10 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   const ncRef = useRef<PlatformCardRef>(null);
   const lcRef = useRef<PlatformCardRef>(null);
   const luoguRef = useRef<PlatformCardRef>(null);
-  const dmyRef = useRef<PlatformCardRef>(null); // [新增]: Daimayuan Ref
+  const dmyRef = useRef<PlatformCardRef>(null);
   const hduRef = useRef<PlatformCardRef>(null);
 
   // UI State
-  // [修复]: 移除了之前导致 CI 构建失败的未使用变量 (isGlobalRefreshing, setIsGlobalRefreshingState)
   const [solvedStats, setSolvedStats] = useState<Record<string, number>>({});
   const [activeIndex, setActiveIndex] = useState<number>(-1);
 
@@ -108,12 +107,10 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   };
 
   const handleRefreshAll = async () => {
-    // 逻辑占位，保持原有的 Loading 状态切换
     isBatchingUpdateRef.current = true;
     pendingStatsRef.current = {}; 
 
-    // [修改]: 将 dmyRef 加入一键查询队列
-    const refs = [cfRef, acRef, ncRef, lcRef, luoguRef, dmyRef];
+    const refs = [cfRef, acRef, ncRef, lcRef, luoguRef, dmyRef, hduRef];
     
     await Promise.allSettled(
       refs.map(ref => ref.current?.triggerSearch())
@@ -127,9 +124,6 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
     isBatchingUpdateRef.current = false;
   };
 
-  // --------------------------------------------------------------------------
-  // 组件挂载（软件启动）时自动触发一次查询
-  // --------------------------------------------------------------------------
   useEffect(() => {
     const timer = setTimeout(() => {
       handleRefreshAll();
@@ -144,7 +138,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
       { key: 'atcoder', name: 'AtCoder', value: solvedStats['atcoder'] || 0 },
       { key: 'nowcoder', name: 'NowCoder', value: solvedStats['nowcoder'] || 0 },
       { key: 'luogu', name: 'Luogu', value: solvedStats['luogu'] || 0 },
-      { key: 'daimayuan', name: 'Daimayuan', value: solvedStats['daimayuan'] || 0 }, // [新增]: 加入图表计算
+      { key: 'daimayuan', name: 'Daimayuan', value: solvedStats['daimayuan'] || 0 },
     ];
     
     return data
@@ -161,7 +155,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
   };
-   
+    
   const onPieLeave = () => {
       setActiveIndex(-1);
   };
@@ -187,7 +181,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
 
   return (
     <div className="animate-fade-in pb-20">
-       
+        
       {/* 头部控制区 */}
       <div className="flex justify-between items-center mb-6 px-1">
         <h2 className="text-xl font-bold text-white/90 tracking-tight">我的战绩</h2>
@@ -252,7 +246,6 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           onStatsUpdate={handleStatsUpdate}
         />
 
-        {/* [新增]: 代码源卡片 */}
         <PlatformCard 
           ref={dmyRef}
           platformName="Daimayuan" 
@@ -284,10 +277,10 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
             刷题分布概览
           </h3>
           
-          <div className="flex flex-col md:flex-row items-center justify-center gap-8 h-[300px]">
-            {/* 左侧：图表 */}
-            <div className="w-full h-full md:w-1/2 relative" onMouseLeave={onPieLeave}>
-                <ResponsiveContainer width="100%" height="100%">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-8 min-h-[300px]">
+            {/* 左侧：图表容器 - 显式设置 min-h 解决宽高 0 的报错 */}
+            <div className="w-full h-[300px] md:w-1/2 relative min-h-[300px]" onMouseLeave={onPieLeave}>
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
                 <PieChart>
                   <Pie
                     data={chartData}
@@ -303,7 +296,6 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
                     activeIndex={activeIndex}
                     activeShape={PopOutActiveSector} 
                     onMouseEnter={onPieEnter}
-                    // 关闭默认动画以完全接管 active 态
                     isAnimationActive={true}
                   >
                     {chartData.map((entry, index) => (
@@ -352,4 +344,5 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
     </div>
   );
 };
+
 export default DashboardGrid;

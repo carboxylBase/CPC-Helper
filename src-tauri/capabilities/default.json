@@ -7,8 +7,10 @@
   ],
   "permissions": [
     "core:default",
-    "shell:allow-open",
-    "dialog:default",
-    "process:default"
+    "updater:allow-check",
+    "updater:allow-download-and-install",
+    "process:allow-restart",
+    "dialog:allow-ask",
+    "shell:allow-open"
   ]
 }
