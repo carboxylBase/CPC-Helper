@@ -60,7 +60,7 @@ git push origin v1.1.2
 * 确保附件里有 `.msi`, `.dmg`, `.AppImage` 以及最重要的 `latest.json`。
 
 
-6. 点击底部的绿色按钮 **Publish release**。
+6. 点击底部的绿色按钮 **Publish release**。3
 
 ---
 
@@ -80,6 +80,8 @@ git push origin v1.1.2
 ---
 
 ### 附：更新日志模板 (Copy & Paste)
+
+没有的项可以忽略
 
 ```markdown
 # CPC Helper v1.1.2 更新日志

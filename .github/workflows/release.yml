@@ -2,7 +2,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*' # 当推送 v 开头的 tag 时触发 (如 v1.1.1)
+      - 'v*'
 
 jobs:
   publish-tauri:
@@ -42,8 +42,114 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version
+          tagName: app-v__VERSION__ # 自动替换为 app-v1.1.2
           releaseName: 'CPC Helper v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
+
+  # [新增] 聚合生成 latest.json 的任务
+  generate-updater-json:
+    needs: publish-tauri
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Generate latest.json
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // 1. 获取 package.json 中的版本号
+            const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const version = packageJson.version;
+            const tagName = `app-v${version}`; // 必须与上面 tauri-action 的 tagName 格式一致
+            
+            console.log(`Looking for release with tag: ${tagName}`);
+
+            // 2. 获取 Release 信息
+            // 注意：由于是 Draft，可能需要通过 listReleases 查找
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const release = releases.data.find(r => r.tag_name === tagName);
+            if (!release) {
+              core.setFailed(`Release not found for tag ${tagName}`);
+              return;
+            }
+
+            // 3. 构建 Tauri v2 更新 JSON 结构
+            // Tauri v2 格式: platforms: { "darwin-aarch64": { "signature": "...", "url": "..." } }
+            const updateData = {
+              version: version,
+              notes: release.body || "Update available",
+              pub_date: release.published_at || new Date().toISOString(),
+              platforms: {}
+            };
+
+            const assets = release.assets;
+            
+            // 辅助函数：根据文件名判断平台
+            function getPlatform(filename) {
+              const lower = filename.toLowerCase();
+              if (lower.endsWith('.app.tar.gz')) {
+                return lower.includes('aarch64') ? 'darwin-aarch64' : 'darwin-x86_64';
+              }
+              if (lower.endsWith('.appimage.tar.gz') || lower.endsWith('.appimage')) {
+                return 'linux-x86_64';
+              }
+              if (lower.endsWith('.msi.zip') || lower.endsWith('.exe') || lower.endsWith('.nsis.zip')) {
+                return 'windows-x86_64';
+              }
+              return null;
+            }
+
+            // 4. 遍历 Asset，匹配 .sig 文件
+            for (const asset of assets) {
+              if (asset.name.endsWith('.sig')) {
+                // 对应的二进制文件名 (去掉 .sig)
+                const binaryName = asset.name.slice(0, -4);
+                const binaryAsset = assets.find(a => a.name === binaryName);
+                
+                if (binaryAsset) {
+                  const platform = getPlatform(binaryName);
+                  if (platform) {
+                    console.log(`Found update for ${platform}: ${binaryName}`);
+                    
+                    // 下载签名内容
+                    const sigResponse = await github.request(asset.browser_download_url);
+                    // 注意：如果是私有仓库，browser_download_url 可能需要鉴权，但在 Action 中通常可以用 fetch
+                    // 这里我们尝试直接用 github.request 获取内容，或者用 fetch
+                    const signature = await fetch(asset.browser_download_url).then(res => res.text());
+
+                    updateData.platforms[platform] = {
+                      signature: signature.trim(),
+                      url: binaryAsset.browser_download_url
+                    };
+                  }
+                }
+              }
+            }
+
+            // 5. 写入文件并上传
+            fs.writeFileSync('latest.json', JSON.stringify(updateData, null, 2));
+            
+            console.log("Generated latest.json content:", JSON.stringify(updateData, null, 2));
+
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              name: 'latest.json',
+              data: fs.readFileSync('latest.json')
+            });

@@ -121,5 +121,3 @@ npm run tauri build
 ## 📄 许可证 (License)
 
 本项目基于 [MIT License](https://gs.jurieo.com/gemini/official/search?q=LICENSE) 开源。
-
-```
