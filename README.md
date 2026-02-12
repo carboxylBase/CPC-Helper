@@ -111,7 +111,7 @@ npm run tauri build
 
 ## 🤝 贡献 (Contributing)
 
-欢迎提交 Issue 反馈 Bug，或提交 Pull Request 增加新功能！
+欢迎提交 Issue 反馈 Bug，或提交 Pull Request 增加新功能
 
 1. Fork 本仓库
 2. 新建 Feat_xxx 分支
