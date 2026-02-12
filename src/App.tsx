@@ -4,8 +4,8 @@ import { SettingsIcon } from './components/Icons';
 import ContestList from './components/ContestList';
 import DashboardGrid from './components/DashboardGrid';
 import SettingsDrawer from './components/SettingsDrawer';
+import TodoPanel from './components/TodoPanel';
 
-// [新增]: 引入 Tauri 插件用于检查更新、弹窗和重启
 import { check } from '@tauri-apps/plugin-updater';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { relaunch } from '@tauri-apps/plugin-process';
@@ -15,7 +15,7 @@ const DEFAULT_CONFIG = {
   cardOpacity: 0.6,
 };
 
-type Tab = 'contests' | 'profile';
+type Tab = 'contests' | 'profile' | 'todo';
 
 function App() {
   // --- Global State ---
@@ -28,13 +28,12 @@ function App() {
   const tabsRef = useRef<{ [key in Tab]?: HTMLButtonElement | null }>({});
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
 
-  // --- [新增]: 自动检查更新逻辑 ---
+  // --- Automatic Update Check ---
   useEffect(() => {
     const initCheckUpdate = async () => {
       try {
         const update = await check();
         if (update?.available) {
-          // 发现新版本，弹出原生对话框询问
           const yes = await ask(
             `Discover new version v${update.version}!\n\nRelease Notes:\n${update.body}`, 
             {
@@ -46,9 +45,7 @@ function App() {
           );
 
           if (yes) {
-            // 用户点击确认，开始下载并安装
             await update.downloadAndInstall();
-            // 安装完成后重启应用
             await relaunch();
           }
         }
@@ -60,6 +57,7 @@ function App() {
     initCheckUpdate();
   }, []);
 
+  // --- Persistence Logic ---
   useEffect(() => {
     const savedColor = localStorage.getItem('cpc_card_color');
     const savedOpacity = localStorage.getItem('cpc_card_opacity');
@@ -83,7 +81,6 @@ function App() {
     }
   }, [activeTab]);
 
-  // Compute style once here and pass it down
   const cardStyle = {
     backgroundColor: hexToRgba(cardColor, cardOpacity),
     backdropFilter: 'blur(12px)',
@@ -104,7 +101,9 @@ function App() {
                 CPC Helper
               </h1>
               <p className="text-gray-400 text-sm mt-1">
-                {activeTab === 'contests' ? 'Upcoming Algorithms Contests' : 'Multi-Platform Solver Tracker'}
+                {activeTab === 'contests' && 'Upcoming Algorithms Contests'}
+                {activeTab === 'profile' && 'Multi-Platform Solver Tracker'}
+                {activeTab === 'todo' && 'Problem Solving Queue'}
               </p>
             </div>
             
@@ -119,7 +118,7 @@ function App() {
             </div>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs (Order: Contests -> Profile -> Todo) */}
           <div className="relative flex gap-6 mb-6 border-b border-white/10 pb-0">
             <button
               ref={(el) => { tabsRef.current['contests'] = el; }}
@@ -130,6 +129,7 @@ function App() {
             >
               Contest Calendar
             </button>
+            
             <button
               ref={(el) => { tabsRef.current['profile'] = el; }}
               onClick={() => setActiveTab('profile')}
@@ -138,6 +138,16 @@ function App() {
               }`}
             >
               My Stats Dashboard
+            </button>
+
+            <button
+              ref={(el) => { tabsRef.current['todo'] = el; }}
+              onClick={() => setActiveTab('todo')}
+              className={`pb-3 px-2 text-sm font-medium transition-colors ${
+                activeTab === 'todo' ? 'text-blue-400' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Problem Pool
             </button>
 
             {/* Sliding Blue Bar */}
@@ -150,7 +160,7 @@ function App() {
             />
           </div>
 
-          {/* === Main Content Area (Modified for Persistence) === */}
+          {/* === Main Content Area === */}
           
           <div style={{ display: activeTab === 'contests' ? 'block' : 'none' }}>
             <ContestList cardStyle={cardStyle} />
@@ -158,6 +168,10 @@ function App() {
 
           <div style={{ display: activeTab === 'profile' ? 'block' : 'none' }}>
             <DashboardGrid cardStyle={cardStyle} />
+          </div>
+
+          <div style={{ display: activeTab === 'todo' ? 'block' : 'none' }}>
+            <TodoPanel cardStyle={cardStyle} />
           </div>
 
         </div>
