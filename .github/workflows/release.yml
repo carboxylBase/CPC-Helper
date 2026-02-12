@@ -36,34 +36,29 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
-      # =================================================================
-      # [新增调试步骤] 既然都报错了，我们在编译前先检查 Key 对不对
-      # 不会打印私钥内容，只会检查长度和格式，确保安全
-      # =================================================================
+      # 调试步骤保留，以防万一
       - name: Debug Key Availability
         shell: bash
         env:
           MY_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if [ -z "$MY_KEY" ]; then
-            echo "❌ CRITICAL ERROR: TAURI_SIGNING_PRIVATE_KEY is empty or not set in Secrets!"
+            echo "❌ CRITICAL ERROR: Key is empty!"
             exit 1
           else
             echo "✅ Key detected. Length: ${#MY_KEY}"
-            # 检查是否包含标准头
-            if [[ "$MY_KEY" == *"untrusted comment"* ]]; then
-               echo "✅ Key header looks correct (minisign)."
-            else
-               echo "⚠️ WARNING: Key does not look like a standard minisign key!"
+            if [[ "$MY_KEY" == *"encrypted secret key"* ]]; then
+               echo "ℹ️ Note: Key is ENCRYPTED. Password variable is required (even if empty)."
             fi
           fi
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 关键修改：只传入 Key，【删除了】PASSWORD 变量
-          # 这样 Tauri 就知道这是一个无密码的 Key，不会尝试错误解密
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # 关键修正：显式传入空字符串作为密码
+          # 这样 Tauri 就能用“空密码”去解密那个“encrypted”的私钥了
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: v__VERSION__
           releaseName: 'CPC Helper v__VERSION__'
@@ -89,15 +84,12 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-
-            // 1. 获取版本信息
             const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             const version = packageJson.version;
             const tagName = `v${version}`;
             
             console.log(`Processing update manifest for: ${tagName}`);
 
-            // 2. 获取 Release 资产信息
             const releases = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -164,7 +156,6 @@ jobs:
 
             if (!foundSig) {
               console.log("❌ ERROR: Still no .sig files found.");
-              console.log("👉 Please check the logs of the 'publish-tauri' job (not this one!) to see why signing failed.");
               core.setFailed("No signatures found.");
               return;
             }
