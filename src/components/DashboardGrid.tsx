@@ -14,6 +14,38 @@ interface ChartData {
 }
 
 // ----------------------------------------------------------------------------
+// 辅助组件：懒加载图表包装器 (解决 width: 0 报错的关键)
+// ----------------------------------------------------------------------------
+const LazyChartWrapper = ({ children, className }: { children: React.ReactNode, className?: string }) => {
+  const domRef = useRef<HTMLDivElement>(null);
+  const [shouldRender, setShouldRender] = useState(false);
+
+  useEffect(() => {
+    if (!domRef.current) return;
+    
+    // 监听容器尺寸变化
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        // 只有当宽高都 > 0 时才渲染子组件 (即 Tab 可见时)
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          setShouldRender(true);
+          observer.disconnect(); // 一旦渲染成功，就不再监听，保持渲染状态
+        }
+      }
+    });
+    
+    observer.observe(domRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={domRef} className={className} style={{ width: '100%', height: '100%' }}>
+      {shouldRender ? children : null}
+    </div>
+  );
+};
+
+// ----------------------------------------------------------------------------
 // 动画组件：PopOutActiveSector
 // ----------------------------------------------------------------------------
 const PopOutActiveSector = (props: any) => {
@@ -278,39 +310,41 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           </h3>
           
           <div className="flex flex-col md:flex-row items-center justify-center gap-8 min-h-[300px]">
-            {/* 左侧：图表容器 - 显式设置 min-h 解决宽高 0 的报错 */}
+            {/* 左侧：图表容器 - 使用 LazyChartWrapper 包裹 */}
             <div className="w-full h-[300px] md:w-1/2 relative min-h-[300px]" onMouseLeave={onPieLeave}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    cornerRadius={4}
-                    dataKey="value"
-                    stroke="none"
-                    // @ts-ignore: Recharts type definition mismatch
-                    activeIndex={activeIndex}
-                    activeShape={PopOutActiveSector} 
-                    onMouseEnter={onPieEnter}
-                    isAnimationActive={true}
-                  >
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} stroke="none"/>
-                    ))}
-                  </Pie>
-                  
-                  <Tooltip 
-                    content={<CustomTooltip />} 
-                    wrapperStyle={{ zIndex: 1000, outline: 'none' }}
-                    allowEscapeViewBox={{ x: true, y: true }}
-                    cursor={false}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              <LazyChartWrapper>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={chartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      cornerRadius={4}
+                      dataKey="value"
+                      stroke="none"
+                      // @ts-ignore: Recharts type definition mismatch
+                      activeIndex={activeIndex}
+                      activeShape={PopOutActiveSector} 
+                      onMouseEnter={onPieEnter}
+                      isAnimationActive={true}
+                    >
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none"/>
+                      ))}
+                    </Pie>
+                    
+                    <Tooltip 
+                      content={<CustomTooltip />} 
+                      wrapperStyle={{ zIndex: 1000, outline: 'none' }}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                      cursor={false}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </LazyChartWrapper>
               
               {/* 中心文字：总数 */}
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
