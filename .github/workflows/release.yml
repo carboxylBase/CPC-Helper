@@ -2,7 +2,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*' # 当推送 v 开头的 tag 时触发 (如 v1.2.1)
+      - 'v*'
 
 jobs:
   publish-tauri:
@@ -48,7 +48,6 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-  # [核心修复] 聚合生成符合 Tauri v2 规范的 latest.json
   generate-updater-json:
     needs: publish-tauri
     runs-on: ubuntu-latest
@@ -87,6 +86,20 @@ jobs:
               return;
             }
 
+            // [调试日志] 打印当前 Release 里的所有文件
+            console.log("Current assets in release:", release.assets.map(a => a.name));
+
+            // 3. [关键修复] 检查并删除已存在的 latest.json，防止 'already_exists' 报错
+            const existingManifest = release.assets.find(a => a.name === 'latest.json');
+            if (existingManifest) {
+              console.log(`Deleting existing latest.json (id: ${existingManifest.id}) to avoid conflict...`);
+              await github.rest.repos.deleteReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                asset_id: existingManifest.id,
+              });
+            }
+
             const updateData = {
               version: version,
               notes: release.body || "Update available",
@@ -94,7 +107,7 @@ jobs:
               platforms: {}
             };
 
-            // 3. 平台匹配逻辑：确保 Windows 包含所有 fallback keys
+            // 4. 平台匹配逻辑：支持 Windows 多 Key
             function getPlatformKeys(filename) {
               const lower = filename.toLowerCase();
               if (lower.endsWith('.app.tar.gz')) {
@@ -103,7 +116,7 @@ jobs:
               if (lower.endsWith('.appimage.tar.gz') || lower.endsWith('.appimage')) {
                 return ['linux-x86_64'];
               }
-              // 关键修复：解决 windows-x86_64-nsis 找不到的问题
+              // 关键：同时匹配 exe 和 nsis.zip，并生成两个 key
               if (lower.endsWith('.msi.zip') || lower.endsWith('.exe') || lower.endsWith('.nsis.zip')) {
                 return ['windows-x86_64', 'windows-x86_64-nsis'];
               }
@@ -111,19 +124,21 @@ jobs:
             }
 
             const assets = release.assets;
-            
-            // 4. 遍历资产，下载签名并填充 JSON
+            let foundSig = false;
+
+            // 5. 遍历资产，下载签名并填充 JSON
             for (const asset of assets) {
               if (asset.name.endsWith('.sig')) {
-                const binaryName = asset.name.slice(0, -4);
+                foundSig = true;
+                const binaryName = asset.name.slice(0, -4); // 去掉 .sig
                 const binaryAsset = assets.find(a => a.name === binaryName);
                 
                 if (binaryAsset) {
                   const keys = getPlatformKeys(binaryName);
                   if (keys.length > 0) {
+                    // console.log(`[Match] ${binaryName} -> ${keys.join(', ')}`);
                     const signature = await fetch(asset.browser_download_url).then(res => res.text());
                     for (const key of keys) {
-                      console.log(`Mapping ${binaryName} to platform key: ${key}`);
                       updateData.platforms[key] = {
                         signature: signature.trim(),
                         url: binaryAsset.browser_download_url
@@ -134,9 +149,13 @@ jobs:
               }
             }
 
-            // 5. 将生成的 latest.json 上传回 GitHub Release
+            if (!foundSig) {
+              console.log("⚠️ No .sig files found! Updates will fail if binaries are not signed.");
+            }
+
+            // 6. 写入文件并上传
+            console.log("Final Manifest content:", JSON.stringify(updateData, null, 2));
             fs.writeFileSync('latest.json', JSON.stringify(updateData, null, 2));
-            console.log("Final Manifest:", JSON.stringify(updateData, null, 2));
 
             await github.rest.repos.uploadReleaseAsset({
               owner: context.repo.owner,
