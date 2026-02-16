@@ -2,6 +2,9 @@ import { useRef, useState, useMemo, useEffect } from 'react';
 import PlatformCard, { PlatformCardRef } from './PlatformCard';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
 import { getPlatformColor } from '../utils';
+// [新增] 引入热力图和工具
+import ActivityHeatmap from './ActivityHeatmap';
+import { updateActivitySnapshot, calculateDailyActivity, DailyActivity } from '../utils/history';
 
 interface DashboardGridProps {
   cardStyle: any;
@@ -13,8 +16,10 @@ interface ChartData {
   color: string;
 }
 
+// ... (保留 LazyChartWrapper 和 PopOutActiveSector 代码，此处省略以节省篇幅，请保持原样) ...
+
 // ----------------------------------------------------------------------------
-// 辅助组件：懒加载图表包装器 (解决 width: 0 报错的关键)
+// 辅助组件：懒加载图表包装器 (保持原样)
 // ----------------------------------------------------------------------------
 const LazyChartWrapper = ({ children, className }: { children: React.ReactNode, className?: string }) => {
   const domRef = useRef<HTMLDivElement>(null);
@@ -22,18 +27,14 @@ const LazyChartWrapper = ({ children, className }: { children: React.ReactNode, 
 
   useEffect(() => {
     if (!domRef.current) return;
-    
-    // 监听容器尺寸变化
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        // 只有当宽高都 > 0 时才渲染子组件 (即 Tab 可见时)
         if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
           setShouldRender(true);
-          observer.disconnect(); // 一旦渲染成功，就不再监听，保持渲染状态
+          observer.disconnect();
         }
       }
     });
-    
     observer.observe(domRef.current);
     return () => observer.disconnect();
   }, []);
@@ -46,63 +47,26 @@ const LazyChartWrapper = ({ children, className }: { children: React.ReactNode, 
 };
 
 // ----------------------------------------------------------------------------
-// 动画组件：PopOutActiveSector
+// 动画组件：PopOutActiveSector (保持原样)
 // ----------------------------------------------------------------------------
 const PopOutActiveSector = (props: any) => {
+  // ... (保持原样代码)
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, midAngle } = props;
   const [isMounted, setIsMounted] = useState(false);
-
   useEffect(() => {
-    const rafId = requestAnimationFrame(() => {
-        setIsMounted(true);
-    });
+    const rafId = requestAnimationFrame(() => setIsMounted(true));
     return () => cancelAnimationFrame(rafId);
   }, []);
-
   const RADIAN = Math.PI / 180;
   const sin = Math.sin(-RADIAN * midAngle);
   const cos = Math.cos(-RADIAN * midAngle);
-    
   const mx = 12 * cos;
   const my = 12 * sin;
-
   return (
     <g>
-      {/* 幽灵判定层 */}
-      <Sector
-        cx={cx}
-        cy={cy}
-        innerRadius={innerRadius}
-        outerRadius={outerRadius}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        fill="transparent" 
-        stroke="none"
-      />
-
-      {/* 视觉动画层 */}
-      <g
-        style={{
-          transformBox: 'fill-box',
-          transformOrigin: 'center',
-          transition: 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-          transform: isMounted 
-            ? `translate(${mx}px, ${my}px) scale(1.05)` 
-            : `translate(0px, 0px) scale(1)`
-        }}
-        pointerEvents="none" 
-      >
-        <Sector
-          cx={cx}
-          cy={cy}
-          innerRadius={innerRadius}
-          outerRadius={outerRadius}
-          startAngle={startAngle}
-          endAngle={endAngle}
-          fill={fill}
-          cornerRadius={6}
-          className="filter drop-shadow-xl"
-        />
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill="transparent" stroke="none" />
+      <g style={{ transformBox: 'fill-box', transformOrigin: 'center', transition: 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)', transform: isMounted ? `translate(${mx}px, ${my}px) scale(1.05)` : `translate(0px, 0px) scale(1)` }} pointerEvents="none">
+        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} cornerRadius={6} className="filter drop-shadow-xl" />
       </g>
     </g>
   );
@@ -110,7 +74,7 @@ const PopOutActiveSector = (props: any) => {
 
 
 const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
-  // Refs to child components
+  // Refs
   const cfRef = useRef<PlatformCardRef>(null);
   const acRef = useRef<PlatformCardRef>(null);
   const ncRef = useRef<PlatformCardRef>(null);
@@ -122,6 +86,8 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
   // UI State
   const [solvedStats, setSolvedStats] = useState<Record<string, number>>({});
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+  // [新增] 热力图数据状态
+  const [heatmapData, setHeatmapData] = useState<DailyActivity[]>([]);
 
   // Logic Refs
   const isBatchingUpdateRef = useRef(false);
@@ -156,6 +122,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
     isBatchingUpdateRef.current = false;
   };
 
+  // 初始化延迟刷新
   useEffect(() => {
     const timer = setTimeout(() => {
       handleRefreshAll();
@@ -163,6 +130,12 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
     return () => clearTimeout(timer);
   }, []);
 
+  // [新增] 初始化热力图数据
+  useEffect(() => {
+    setHeatmapData(calculateDailyActivity());
+  }, []);
+
+  // 图表数据计算
   const chartData: ChartData[] = useMemo(() => {
     const data = [
       { key: 'codeforces', name: 'Codeforces', value: solvedStats['codeforces'] || 0 },
@@ -184,14 +157,21 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
 
   const totalSolved = chartData.reduce((acc, curr) => acc + curr.value, 0);
 
-  const onPieEnter = (_: any, index: number) => {
-    setActiveIndex(index);
-  };
-    
-  const onPieLeave = () => {
-      setActiveIndex(-1);
-  };
+  // [新增] 监听 totalSolved 变化，记录快照并更新热力图
+  useEffect(() => {
+    if (totalSolved > 0) {
+      // 1. 记录今日总数
+      updateActivitySnapshot(totalSolved);
+      // 2. 重新计算差值以更新UI
+      setHeatmapData(calculateDailyActivity());
+    }
+  }, [totalSolved]);
 
+  // Pie Chart Events
+  const onPieEnter = (_: any, index: number) => setActiveIndex(index);
+  const onPieLeave = () => setActiveIndex(-1);
+
+  // Custom Tooltip
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -310,7 +290,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
           </h3>
           
           <div className="flex flex-col md:flex-row items-center justify-center gap-8 min-h-[300px]">
-            {/* 左侧：图表容器 - 使用 LazyChartWrapper 包裹 */}
+            {/* 左侧：图表容器 */}
             <div className="w-full h-[300px] md:w-1/2 relative min-h-[300px]" onMouseLeave={onPieLeave}>
               <LazyChartWrapper>
                 <ResponsiveContainer width="100%" height="100%">
@@ -325,7 +305,7 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
                       cornerRadius={4}
                       dataKey="value"
                       stroke="none"
-                      // @ts-ignore: Recharts type definition mismatch
+                      // @ts-ignore
                       activeIndex={activeIndex}
                       activeShape={PopOutActiveSector} 
                       onMouseEnter={onPieEnter}
@@ -346,7 +326,6 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
                 </ResponsiveContainer>
               </LazyChartWrapper>
               
-              {/* 中心文字：总数 */}
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
                 <div className="text-3xl font-bold text-white">{totalSolved}</div>
                 <div className="text-xs text-gray-400 uppercase tracking-widest">Total</div>
@@ -374,6 +353,9 @@ const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
             </div>
           </div>
         </div>
+        
+        {/* [新增] 热力图组件位于最下方 */}
+        <ActivityHeatmap data={heatmapData} cardStyle={cardStyle} />
       </div>
     </div>
   );
