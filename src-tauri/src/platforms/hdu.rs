@@ -5,7 +5,8 @@ use scraper::{Html, Selector};
 
 // HDU 列表地址
 const HDU_URL: &str = "https://acm.hdu.edu.cn/contests/contest_list.php";
-const HDU_BASE_URL: &str = "https://acm.hdu.edu.cn/contests/";
+// [修改] 只保留域名，用于重组 URL
+const HDU_DOMAIN: &str = "https://acm.hdu.edu.cn";
 
 pub async fn fetch_contests() -> Result<Vec<Contest>> {
     // 1. 发起请求
@@ -51,14 +52,33 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
             continue;
         }
 
-        // 提取链接
+        // [修改] 提取链接逻辑优化
         let url = match name_el.select(&link_selector).next() {
             Some(a) => {
                 let href = a.value().attr("href").unwrap_or("");
                 if href.is_empty() {
                     continue;
                 }
-                format!("{}{}", HDU_BASE_URL, href)
+                
+                // 核心修复：不直接拼接，而是提取 cid 重组
+                if let Some(idx) = href.find("cid=") {
+                    let cid_str = &href[idx + 4..];
+                    // 处理可能存在的后续参数 (虽然 HDU 列表页通常没有，但为了健壮性)
+                    let cid = cid_str.split('&').next().unwrap_or(cid_str);
+                    
+                    // 强制生成你需要的格式: https://acm.hdu.edu.cn/contest/problems?cid=1197
+                    format!("{}/contest/problems?cid={}", HDU_DOMAIN, cid)
+                } else {
+                    // Fallback: 如果实在找不到 cid，才尝试拼接 (兼容旧逻辑)
+                    if href.starts_with("http") {
+                        href.to_string()
+                    } else if href.starts_with("/") {
+                        format!("{}{}", HDU_DOMAIN, href)
+                    } else {
+                        // 假设是相对路径，拼接到 contests 下
+                        format!("{}/contests/{}", HDU_DOMAIN, href)
+                    }
+                }
             }
             None => continue,
         };

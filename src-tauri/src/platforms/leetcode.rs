@@ -5,11 +5,11 @@ use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
 
-// 国际版用于查询比赛
-const LEETCODE_GRAPHQL_URL: &str = "https://leetcode.com/graphql";
-// noj-go 端点，通常对 Read-Only 请求更宽容 (Rating)
+// [新增] 国际服端点 (用于获取比赛列表，API 较稳定)
+const LEETCODE_COM_GRAPHQL_URL: &str = "https://leetcode.com/graphql";
+
+// [保留] 国服端点 (用于获取个人战绩)
 const LEETCODE_CN_NOJ_URL: &str = "https://leetcode.cn/graphql/noj-go/";
-// 备用标准端点 (Solved)
 const LEETCODE_CN_GRAPHQL_URL: &str = "https://leetcode.cn/graphql";
 
 #[derive(Deserialize, Debug)]
@@ -21,10 +21,11 @@ struct GraphQlResponse {
 
 #[derive(Deserialize, Debug)]
 struct Data {
+    // 国际服字段
     #[serde(rename = "upcomingContests")]
     upcoming_contests: Option<Vec<RawContest>>,
 
-    // UserStats
+    // 国服用户字段
     #[serde(rename = "userContestRanking")]
     user_contest_ranking: Option<UserContestRanking>,
     #[serde(rename = "userProfileUserQuestionProgress")]
@@ -58,9 +59,11 @@ struct QuestionCount {
     count: u32,
 }
 
-// [原有功能] 查询比赛列表
+// [修改] 混合策略：从 COM 获取数据，但生成 CN 的链接
 pub async fn fetch_contests() -> Result<Vec<Contest>> {
     let client = Client::new();
+    
+    // 使用国际服标准的查询语句
     let query = json!({
         "query": r#"
         query contestUpcomingContests {
@@ -73,8 +76,9 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
         "#
     });
 
+    // 请求发送给 leetcode.com
     let resp = client
-        .post(LEETCODE_GRAPHQL_URL)
+        .post(LEETCODE_COM_GRAPHQL_URL)
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .header("Content-Type", "application/json")
         .json(&query)
@@ -84,7 +88,8 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
     let graphql_resp: GraphQlResponse = resp.json().await?;
     let data = graphql_resp
         .data
-        .ok_or_else(|| anyhow::anyhow!("LeetCode response missing 'data' field"))?;
+        .ok_or_else(|| anyhow::anyhow!("LeetCode (.com) response missing 'data' field"))?;
+    
     let mut contests = Vec::new();
 
     for raw in data.upcoming_contests.unwrap_or_default() {
@@ -94,15 +99,16 @@ pub async fn fetch_contests() -> Result<Vec<Contest>> {
 
         contests.push(Contest {
             name: raw.title,
-            url: format!("https://leetcode.com/contest/{}", raw.title_slug),
-            platform: "LeetCode".to_string(),
+            // [核心修改] 强行拼接为国服链接
+            url: format!("https://leetcode.cn/contest/{}", raw.title_slug),
+            platform: "LeetCode".to_string(), // 显示为 LeetCode (CN 逻辑由 URL 体现)
             start_time,
         });
     }
     Ok(contests)
 }
 
-// [修改] 查询 LeetCode CN 用户 Rating 和 刷题数
+// [保留] 查询 LeetCode CN 用户 Rating 和 刷题数 (保持不变，使用 CN 接口)
 pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
     let client = Client::new();
     let profile_referer = format!("https://leetcode.cn/u/{}/", handle);
@@ -134,8 +140,6 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
     });
 
     // 并发请求
-    // rating -> LEETCODE_CN_NOJ_URL
-    // solved -> LEETCODE_CN_GRAPHQL_URL
     let (rating_resp, solved_resp) = tokio::join!(
         client.post(LEETCODE_CN_NOJ_URL)
             .header("Content-Type", "application/json")
@@ -155,9 +159,6 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
 
     // 4. 解析 Rating
     let mut rating_val: Option<u32> = None;
-
-    // 如果请求失败，这里不直接返回 Err，而是尝试解析另一个结果，尽可能返回部分数据
-    // 但如果两个都失败，最后可能会返回全空数据，或者你可以选择在这里抛出错误触发重试
     if let Ok(resp) = rating_resp {
         if resp.status().is_success() {
             if let Ok(g_resp) = resp.json::<GraphQlResponse>().await {
@@ -187,11 +188,6 @@ pub async fn fetch_user_stats(handle: &str) -> Result<UserStats> {
             }
         }
     }
-
-    // 如果两个请求都失败（或者数据都为空），是否需要抛出错误让上层重试？
-    // 这里采取的策略是：只要网络请求没崩 panic，就尽量返回结果（即使是0或None）
-    // 如果你想让网络错误触发重试，可以在上面的 if let Ok(resp) 的 else 分支里做处理。
-    // 但为了保持 user experience，返回部分数据往往比一直转圈重试要好。
 
     Ok(UserStats {
         platform: "LeetCode".to_string(),

@@ -72,13 +72,9 @@ const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
       >
         <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ backgroundColor: color }}></div>
 
+        {/* Header: 仅保留 Platform Name，移除了 Rank 显示 */}
         <div className="flex justify-between items-center mb-3">
           <span className="font-bold text-lg text-white/90">{platformName}</span>
-          {stats && stats.rank && (
-            <span className="text-xs font-mono uppercase bg-white/5 px-2 py-0.5 rounded text-gray-400">
-              {stats.rank}
-            </span>
-          )}
         </div>
 
         <div className="flex gap-2 mb-3">

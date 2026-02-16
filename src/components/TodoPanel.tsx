@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-// [新增] 引入刚刚封装的组件
+import React, { useState, useEffect, useCallback } from 'react';
+// [保留] 引入 DatePicker
 import DatePicker from './DatePicker';
 
 // --- 工具函数 (保留业务相关的日期计算) ---
@@ -46,8 +46,8 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
   const [showCompleted, setShowCompleted] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // 初始化 & 保存逻辑
-  useEffect(() => {
+  // [新增] 提取加载逻辑为独立函数
+  const loadItems = useCallback(() => {
     const saved = localStorage.getItem('cpc_todo_pool');
     if (saved) {
       try {
@@ -61,8 +61,31 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
     }
   }, []);
 
+  // [修改] 初始化 & 监听自定义事件
   useEffect(() => {
-    localStorage.setItem('cpc_todo_pool', JSON.stringify(items));
+    loadItems(); // 首次加载
+
+    // 监听来自 ContestList 的更新事件
+    const handleUpdate = () => {
+        loadItems();
+    };
+    window.addEventListener('cpc_todo_update', handleUpdate);
+
+    return () => {
+        window.removeEventListener('cpc_todo_update', handleUpdate);
+    };
+  }, [loadItems]);
+
+  // [修改] 保存逻辑 (增加防抖或直接保存)
+  // 注意：当 items 变更时，写入 storage。
+  // 但如果 items 变更是因为 loadItems() 读取 storage 导致的，这里再次写入其实是多余的但无害。
+  // 为了防止死循环 (load -> set -> effect -> save -> load)，我们需要小心。
+  // 这里的依赖是 [items]，只有当用户操作导致 items 变化时，我们才保存。
+  // 为了避免"监听事件更新了items -> 触发此effect -> 再次保存"，其实问题不大，因为数据是一致的。
+  useEffect(() => {
+    if (items.length > 0) { // 简单防止初始空数组覆盖（虽通常不会）
+        localStorage.setItem('cpc_todo_pool', JSON.stringify(items));
+    }
   }, [items]);
 
   // 同步添加栏日期
@@ -84,7 +107,7 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
       createdAt: Date.now(),
     };
 
-    setItems([task, ...items]);
+    setItems(prev => [task, ...prev]);
     setNewItem({ ...newItem, title: '', link: '', note: '' }); 
   };
 
@@ -155,7 +178,7 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
 
       {/* --- 输入区域 --- */}
       <div 
-        className="rounded-xl p-6 shadow-lg border border-white/5"
+        className="rounded-xl p-6 shadow-lg border border-white/5 relative z-10"
         style={cardStyle}
       >
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -164,7 +187,6 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
         
         <form onSubmit={handleAddItem} className="flex flex-col gap-3">
           <div className="flex gap-3">
-            {/* 使用提取出的 DatePicker (默认样式) */}
             <div className="w-40 flex-shrink-0">
                <DatePicker 
                  value={newItem.targetDate}
@@ -310,7 +332,7 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
         </div>
       )}
 
-      {/* --- 确认弹窗 --- */}
+      {/* --- 确认弹窗 (保留) --- */}
       {deletingId && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-sm rounded-xl border border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200" style={{ ...cardStyle, backgroundColor: 'rgba(30, 41, 59, 0.95)' }}>
