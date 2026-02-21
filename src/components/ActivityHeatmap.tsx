@@ -10,6 +10,13 @@ const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ data, cardStyle }) =>
   
   // --- 统计数据计算 (基于传入的 data 数组) ---
 
+  // 0. 今日做题数
+  const todayCount = useMemo(() => {
+    if (data.length < 1) return 0;
+    // data 数组按日期升序排列，最后一个是今天
+    return data[data.length - 1].count;
+  }, [data]);
+
   // 1. 昨日做题数
   const yesterdayCount = useMemo(() => {
     if (data.length < 2) return 0;
@@ -65,11 +72,15 @@ const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ data, cardStyle }) =>
   };
 
   // 统计卡片组件
-  const StatCard = ({ label, value }: { label: string, value: number }) => (
-    <div className="bg-black/20 px-3 py-2 rounded-lg border border-white/5 flex flex-col items-center justify-center min-w-[80px]">
-      <span className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">{label}</span>
+  const StatCard = ({ label, value, highlight = false }: { label: string, value: number, highlight?: boolean }) => (
+    <div className={`px-3 py-2 rounded-lg border flex flex-col items-center justify-center min-w-[80px] transition-colors ${
+      highlight 
+        ? "bg-green-500/10 border-green-500/20" 
+        : "bg-black/20 border-white/5"
+    }`}>
+      <span className={`text-[10px] uppercase tracking-wider mb-0.5 ${highlight ? "text-green-400" : "text-gray-400"}`}>{label}</span>
       <div className="flex items-baseline gap-1">
-        <span className="text-lg font-bold text-white">{value}</span>
+        <span className={`text-lg font-bold ${highlight ? "text-green-400" : "text-white"}`}>{value}</span>
         <span className="text-[10px] text-gray-500">problems</span>
       </div>
     </div>
@@ -77,13 +88,14 @@ const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ data, cardStyle }) =>
 
   return (
     <div className="rounded-2xl p-6 border border-white/5 mt-6" style={cardStyle}>
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-6">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-6">
         <h3 className="text-lg font-bold text-white/90 flex items-center gap-2">
           <span>🔥</span> Activity Heatmap
         </h3>
         
-        {/* 统计概览 - Grid 布局适配不同屏幕 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto">
+        {/* 统计概览 - 调整为 5 列布局，在小屏幕上自动折行 */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full xl:w-auto">
+           <StatCard label="Today" value={todayCount} highlight={todayCount > 0} />
            <StatCard label="Yesterday" value={yesterdayCount} />
            <StatCard label="Last 7 Days" value={lastWeekCount} />
            <StatCard label="Last 30 Days" value={lastMonthCount} />

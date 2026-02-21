@@ -1,1 +1,2 @@
-src/components/ContestList.tsx
+src/utils/history.ts
+src/components/ActivityHeatmap.tsx
