@@ -4,12 +4,28 @@ import { fetchUserStats } from '../services/contestService';
 import { getPlatformColor, getRatingColor } from '../utils';
 import { SearchIcon } from './Icons';
 
+// --- OJ 跳转配置 (已修正代码源与牛客链接) ---
+const OJ_LINKS: Record<string, { home: string; profile: string }> = {
+  codeforces: { home: 'https://codeforces.com', profile: 'https://codeforces.com/profile/' },
+  leetcode: { home: 'https://leetcode.cn', profile: 'https://leetcode.cn/u/' },
+  atcoder: { home: 'https://atcoder.jp', profile: 'https://atcoder.jp/users/' },
+  nowcoder: { 
+    home: 'https://ac.nowcoder.com/acm/home', 
+    profile: 'https://ac.nowcoder.com/acm/contest/profile/' 
+  },
+  luogu: { home: 'https://www.luogu.com.cn', profile: 'https://www.luogu.com.cn/user/' },
+  daimayuan: { 
+    home: 'https://bs.daimayuan.top', 
+    profile: 'https://bs.daimayuan.top/user/' 
+  },
+  hdu: { home: 'https://acm.hdu.edu.cn', profile: 'https://acm.hdu.edu.cn/userstatus.php?user=' },
+};
+
 interface PlatformCardProps {
   platformName: string;
   platformKey: string;
   cardStyle: any;
   isEnabled?: boolean;
-  // [新增] 回调函数，用于将数据汇报给父组件
   onStatsUpdate?: (platformKey: string, solvedCount: number) => void;
 }
 
@@ -27,8 +43,6 @@ const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
     useEffect(() => {
       const saved = localStorage.getItem(`cpc_handle_${platformKey}`);
       if (saved) setHandle(saved);
-      // 注意：这里我们暂时不在加载时自动汇报，只在查询成功时汇报
-      // 如果需要持久化图表，可能需要更复杂的逻辑，但目前符合你的"手动查询"逻辑
     }, [platformKey]);
 
     const handleSearch = async () => {
@@ -37,7 +51,6 @@ const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
       setLoading(true);
       setError(null);
       setStats(null);
-      // 重置该平台的图表数据（设为0），防止查询失败还显示旧数据
       if (onStatsUpdate) onStatsUpdate(platformKey, 0);
 
       localStorage.setItem(`cpc_handle_${platformKey}`, handle);
@@ -45,15 +58,11 @@ const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
       try {
         const data = await fetchUserStats(platformKey, handle);
         setStats(data);
-        
-        // [新增] 查询成功，汇报做题数
         if (onStatsUpdate) {
           onStatsUpdate(platformKey, data.solved_count || 0);
         }
-
       } catch (err: any) {
         setError('Not Found');
-        // 失败时不汇报或汇报0，上面已经重置过了
       } finally {
         setLoading(false);
       }
@@ -65,16 +74,34 @@ const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
 
     const color = getPlatformColor(platformName);
 
+    const getJumpUrl = () => {
+      const config = OJ_LINKS[platformKey];
+      if (!config) return '#';
+      return handle.trim() ? `${config.profile}${handle.trim()}` : config.home;
+    };
+
     return (
       <div 
-        className="relative rounded-2xl p-4 border border-white/5 flex flex-col h-full transition-all duration-300 hover:shadow-lg"
+        className="relative rounded-2xl p-4 border border-white/5 flex flex-col h-full transition-all duration-300 hover:shadow-lg group"
         style={cardStyle}
       >
         <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ backgroundColor: color }}></div>
 
-        {/* Header: 仅保留 Platform Name，移除了 Rank 显示 */}
         <div className="flex justify-between items-center mb-3">
-          <span className="font-bold text-lg text-white/90">{platformName}</span>
+          <a 
+            href={getJumpUrl()} 
+            target="_blank" 
+            rel="noreferrer"
+            className="font-bold text-lg text-white/90 hover:text-blue-400 transition-colors flex items-center gap-1.5 group/link"
+            title={handle ? `Visit ${handle}'s profile` : `Go to ${platformName}`}
+          >
+            {platformName}
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-0 group-hover/link:opacity-100 transition-opacity translate-y-[-1px]">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </a>
         </div>
 
         <div className="flex gap-2 mb-3">

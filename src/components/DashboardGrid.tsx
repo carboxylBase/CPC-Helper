@@ -1,364 +1,155 @@
-import { useRef, useState, useMemo, useEffect } from 'react';
-import PlatformCard, { PlatformCardRef } from './PlatformCard';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
-import { getPlatformColor } from '../utils';
-// [新增] 引入热力图和工具
-import ActivityHeatmap from './ActivityHeatmap';
-import { updateActivitySnapshot, calculateDailyActivity, DailyActivity } from '../utils/history';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { UserStats } from '../types';
+import { fetchUserStats } from '../services/contestService';
+import { getPlatformColor, getRatingColor } from '../utils';
+import { SearchIcon } from './Icons';
 
-interface DashboardGridProps {
+// --- OJ 跳转配置 (已修正代码源与牛客链接) ---
+const OJ_LINKS: Record<string, { home: string; profile: string }> = {
+  codeforces: { home: 'https://codeforces.com', profile: 'https://codeforces.com/profile/' },
+  leetcode: { home: 'https://leetcode.cn', profile: 'https://leetcode.cn/u/' },
+  atcoder: { home: 'https://atcoder.jp', profile: 'https://atcoder.jp/users/' },
+  nowcoder: { 
+    home: 'https://ac.nowcoder.com/acm/home', 
+    profile: 'https://ac.nowcoder.com/acm/contest/profile/' 
+  },
+  luogu: { home: 'https://www.luogu.com.cn', profile: 'https://www.luogu.com.cn/user/' },
+  daimayuan: { 
+    home: 'https://bs.daimayuan.top', 
+    profile: 'https://bs.daimayuan.top/user/' 
+  },
+  hdu: { home: 'https://acm.hdu.edu.cn', profile: 'https://acm.hdu.edu.cn/userstatus.php?user=' },
+};
+
+interface PlatformCardProps {
+  platformName: string;
+  platformKey: string;
   cardStyle: any;
+  isEnabled?: boolean;
+  onStatsUpdate?: (platformKey: string, solvedCount: number) => void;
 }
 
-interface ChartData {
-  name: string;
-  value: number;
-  color: string;
+export interface PlatformCardRef {
+  triggerSearch: () => Promise<void>;
 }
 
-// ... (保留 LazyChartWrapper 和 PopOutActiveSector 代码，此处省略以节省篇幅，请保持原样) ...
+const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
+  ({ platformName, platformKey, cardStyle, isEnabled = false, onStatsUpdate }, ref) => {
+    const [handle, setHandle] = useState('');
+    const [stats, setStats] = useState<UserStats | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-// ----------------------------------------------------------------------------
-// 辅助组件：懒加载图表包装器 (保持原样)
-// ----------------------------------------------------------------------------
-const LazyChartWrapper = ({ children, className }: { children: React.ReactNode, className?: string }) => {
-  const domRef = useRef<HTMLDivElement>(null);
-  const [shouldRender, setShouldRender] = useState(false);
+    useEffect(() => {
+      const saved = localStorage.getItem(`cpc_handle_${platformKey}`);
+      if (saved) setHandle(saved);
+    }, [platformKey]);
 
-  useEffect(() => {
-    if (!domRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          setShouldRender(true);
-          observer.disconnect();
+    const handleSearch = async () => {
+      if (!isEnabled || !handle.trim()) return;
+      
+      setLoading(true);
+      setError(null);
+      setStats(null);
+      if (onStatsUpdate) onStatsUpdate(platformKey, 0);
+
+      localStorage.setItem(`cpc_handle_${platformKey}`, handle);
+
+      try {
+        const data = await fetchUserStats(platformKey, handle);
+        setStats(data);
+        if (onStatsUpdate) {
+          onStatsUpdate(platformKey, data.solved_count || 0);
         }
+      } catch (err: any) {
+        setError('Not Found');
+      } finally {
+        setLoading(false);
       }
-    });
-    observer.observe(domRef.current);
-    return () => observer.disconnect();
-  }, []);
+    };
 
-  return (
-    <div ref={domRef} className={className} style={{ width: '100%', height: '100%' }}>
-      {shouldRender ? children : null}
-    </div>
-  );
-};
-
-// ----------------------------------------------------------------------------
-// 动画组件：PopOutActiveSector (保持原样)
-// ----------------------------------------------------------------------------
-const PopOutActiveSector = (props: any) => {
-  // ... (保持原样代码)
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, midAngle } = props;
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => {
-    const rafId = requestAnimationFrame(() => setIsMounted(true));
-    return () => cancelAnimationFrame(rafId);
-  }, []);
-  const RADIAN = Math.PI / 180;
-  const sin = Math.sin(-RADIAN * midAngle);
-  const cos = Math.cos(-RADIAN * midAngle);
-  const mx = 12 * cos;
-  const my = 12 * sin;
-  return (
-    <g>
-      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill="transparent" stroke="none" />
-      <g style={{ transformBox: 'fill-box', transformOrigin: 'center', transition: 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)', transform: isMounted ? `translate(${mx}px, ${my}px) scale(1.05)` : `translate(0px, 0px) scale(1)` }} pointerEvents="none">
-        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} cornerRadius={6} className="filter drop-shadow-xl" />
-      </g>
-    </g>
-  );
-};
-
-
-const DashboardGrid = ({ cardStyle }: DashboardGridProps) => {
-  // Refs
-  const cfRef = useRef<PlatformCardRef>(null);
-  const acRef = useRef<PlatformCardRef>(null);
-  const ncRef = useRef<PlatformCardRef>(null);
-  const lcRef = useRef<PlatformCardRef>(null);
-  const luoguRef = useRef<PlatformCardRef>(null);
-  const dmyRef = useRef<PlatformCardRef>(null);
-  const hduRef = useRef<PlatformCardRef>(null);
-
-  // UI State
-  const [solvedStats, setSolvedStats] = useState<Record<string, number>>({});
-  const [activeIndex, setActiveIndex] = useState<number>(-1);
-  // [新增] 热力图数据状态
-  const [heatmapData, setHeatmapData] = useState<DailyActivity[]>([]);
-
-  // Logic Refs
-  const isBatchingUpdateRef = useRef(false);
-  const pendingStatsRef = useRef<Record<string, number>>({});
-
-  const handleStatsUpdate = (platformKey: string, count: number) => {
-    if (isBatchingUpdateRef.current) {
-      pendingStatsRef.current[platformKey] = count;
-    } else {
-      setSolvedStats(prev => ({
-        ...prev,
-        [platformKey]: count
-      }));
-    }
-  };
-
-  const handleRefreshAll = async () => {
-    isBatchingUpdateRef.current = true;
-    pendingStatsRef.current = {}; 
-
-    const refs = [cfRef, acRef, ncRef, lcRef, luoguRef, dmyRef, hduRef];
-    
-    await Promise.allSettled(
-      refs.map(ref => ref.current?.triggerSearch())
-    );
-
-    setSolvedStats(prev => ({
-      ...prev,
-      ...pendingStatsRef.current
+    useImperativeHandle(ref, () => ({
+      triggerSearch: handleSearch
     }));
 
-    isBatchingUpdateRef.current = false;
-  };
+    const color = getPlatformColor(platformName);
 
-  // 初始化延迟刷新
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      handleRefreshAll();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
+    const getJumpUrl = () => {
+      const config = OJ_LINKS[platformKey];
+      if (!config) return '#';
+      return handle.trim() ? `${config.profile}${handle.trim()}` : config.home;
+    };
 
-  // [新增] 初始化热力图数据
-  useEffect(() => {
-    setHeatmapData(calculateDailyActivity());
-  }, []);
-
-  // 图表数据计算
-  const chartData: ChartData[] = useMemo(() => {
-    const data = [
-      { key: 'codeforces', name: 'Codeforces', value: solvedStats['codeforces'] || 0 },
-      { key: 'leetcode', name: 'LeetCode', value: solvedStats['leetcode'] || 0 },
-      { key: 'atcoder', name: 'AtCoder', value: solvedStats['atcoder'] || 0 },
-      { key: 'nowcoder', name: 'NowCoder', value: solvedStats['nowcoder'] || 0 },
-      { key: 'luogu', name: 'Luogu', value: solvedStats['luogu'] || 0 },
-      { key: 'daimayuan', name: 'Daimayuan', value: solvedStats['daimayuan'] || 0 },
-    ];
-    
-    return data
-      .filter(item => item.value > 0)
-      .map(item => ({
-        name: item.name,
-        value: item.value,
-        color: getPlatformColor(item.name)
-      }));
-  }, [solvedStats]);
-
-  const totalSolved = chartData.reduce((acc, curr) => acc + curr.value, 0);
-
-  // [新增] 监听 totalSolved 变化，记录快照并更新热力图
-  useEffect(() => {
-    if (totalSolved > 0) {
-      // 1. 记录今日总数
-      updateActivitySnapshot(totalSolved);
-      // 2. 重新计算差值以更新UI
-      setHeatmapData(calculateDailyActivity());
-    }
-  }, [totalSolved]);
-
-  // Pie Chart Events
-  const onPieEnter = (_: any, index: number) => setActiveIndex(index);
-  const onPieLeave = () => setActiveIndex(-1);
-
-  // Custom Tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-gray-900/90 backdrop-blur-md border border-white/10 p-3 rounded-lg shadow-xl z-[9999]">
-          <p className="font-bold text-white mb-1">{data.name}</p>
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: data.color }} />
-            <span>Solved: <span className="text-white font-mono font-bold">{data.value}</span></span>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            {((data.value / totalSolved) * 100).toFixed(1)}% of total
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  return (
-    <div className="animate-fade-in pb-20">
-        
-      {/* 头部控制区 */}
-      <div className="flex justify-between items-center mb-6 px-1">
-        <h2 className="text-xl font-bold text-white/90 tracking-tight">我的战绩</h2>
-        <button 
-          onClick={handleRefreshAll}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-sm font-medium rounded-xl border border-blue-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-            <path d="M3 3v5h5"/>
-            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-            <path d="M16 21h5v-5"/>
-          </svg>
-          <span>一键查询</span>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
-        
-        <PlatformCard 
-          ref={cfRef}
-          platformName="Codeforces" 
-          platformKey="codeforces"
-          cardStyle={cardStyle}
-          isEnabled={true} 
-          onStatsUpdate={handleStatsUpdate}
-        />
-
-        <PlatformCard 
-          ref={lcRef}
-          platformName="LeetCode" 
-          platformKey="leetcode"
-          cardStyle={cardStyle}
-          isEnabled={true} 
-          onStatsUpdate={handleStatsUpdate}
-        />
-
-        <PlatformCard 
-          ref={acRef}
-          platformName="AtCoder" 
-          platformKey="atcoder"
-          cardStyle={cardStyle}
-          isEnabled={true} 
-          onStatsUpdate={handleStatsUpdate}
-        />
-
-        <PlatformCard 
-          ref={ncRef}
-          platformName="NowCoder" 
-          platformKey="nowcoder"
-          cardStyle={cardStyle}
-          isEnabled={true} 
-          onStatsUpdate={handleStatsUpdate}
-        />
-          
-        <PlatformCard 
-          ref={luoguRef}
-          platformName="Luogu" 
-          platformKey="luogu"
-          cardStyle={cardStyle}
-          isEnabled={true} 
-          onStatsUpdate={handleStatsUpdate}
-        />
-
-        <PlatformCard 
-          ref={dmyRef}
-          platformName="Daimayuan" 
-          platformKey="daimayuan"
-          cardStyle={cardStyle}
-          isEnabled={true} 
-          onStatsUpdate={handleStatsUpdate}
-        />
-          
-        <PlatformCard 
-          ref={hduRef}
-          platformName="HDU" 
-          platformKey="hdu"
-          cardStyle={cardStyle}
-          isEnabled={false} 
-        />
-      </div>
-
-      {/* 统计饼图区域 */}
+    return (
       <div 
-        className={`transition-all duration-700 ease-out transform ${totalSolved > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 h-0 overflow-hidden'}`}
+        className="relative rounded-2xl p-4 border border-white/5 flex flex-col h-full transition-all duration-300 hover:shadow-lg group"
+        style={cardStyle}
       >
-        <div 
-          className="rounded-2xl p-6 border border-white/5 relative overflow-hidden"
-          style={cardStyle}
-        >
-          <h3 className="text-lg font-bold text-white/90 mb-4 flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
-            刷题分布概览
-          </h3>
-          
-          <div className="flex flex-col md:flex-row items-center justify-center gap-8 min-h-[300px]">
-            {/* 左侧：图表容器 */}
-            <div className="w-full h-[300px] md:w-1/2 relative min-h-[300px]" onMouseLeave={onPieLeave}>
-              <LazyChartWrapper>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={chartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      cornerRadius={4}
-                      dataKey="value"
-                      stroke="none"
-                      // @ts-ignore
-                      activeIndex={activeIndex}
-                      activeShape={PopOutActiveSector} 
-                      onMouseEnter={onPieEnter}
-                      isAnimationActive={true}
-                    >
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none"/>
-                      ))}
-                    </Pie>
-                    
-                    <Tooltip 
-                      content={<CustomTooltip />} 
-                      wrapperStyle={{ zIndex: 1000, outline: 'none' }}
-                      allowEscapeViewBox={{ x: true, y: true }}
-                      cursor={false}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </LazyChartWrapper>
-              
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                <div className="text-3xl font-bold text-white">{totalSolved}</div>
-                <div className="text-xs text-gray-400 uppercase tracking-widest">Total</div>
+        <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ backgroundColor: color }}></div>
+
+        <div className="flex justify-between items-center mb-3">
+          <a 
+            href={getJumpUrl()} 
+            target="_blank" 
+            rel="noreferrer"
+            className="font-bold text-lg text-white/90 hover:text-blue-400 transition-colors flex items-center gap-1.5 group/link"
+            title={handle ? `Visit ${handle}'s profile` : `Go to ${platformName}`}
+          >
+            {platformName}
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-0 group-hover/link:opacity-100 transition-opacity translate-y-[-1px]">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </a>
+        </div>
+
+        <div className="flex gap-2 mb-3">
+          <input 
+            type="text" 
+            className="bg-black/20 text-white text-sm rounded-lg px-3 py-1.5 w-full outline-none focus:ring-1 focus:ring-blue-500/50 border border-white/5 placeholder-gray-600" 
+            placeholder="Handle / ID" 
+            value={handle}
+            onChange={(e) => setHandle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            disabled={!isEnabled}
+          />
+          <button 
+            onClick={handleSearch}
+            disabled={!isEnabled || loading}
+            className="bg-white/10 hover:bg-white/20 text-white rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <SearchIcon />}
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-[60px] flex items-center justify-center bg-black/10 rounded-xl p-2 border border-white/5 relative overflow-hidden">
+          {!isEnabled ? (
+            <span className="text-xs text-gray-600 italic">Coming Soon</span>
+          ) : error ? (
+            <span className="text-xs text-red-400">{error}</span>
+          ) : stats ? (
+            <div className="w-full grid grid-cols-2 divide-x divide-white/10">
+              <div className="flex flex-col items-center justify-center p-1">
+                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-0.5">Rating</span>
+                <span className="text-xl font-bold" style={{ color: getRatingColor(stats.rating) }}>
+                  {stats.rating || '-'}
+                </span>
+              </div>
+              <div className="flex flex-col items-center justify-center p-1">
+                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-0.5">Solved</span>
+                <span className="text-xl font-bold text-white">
+                  {stats.solved_count}
+                </span>
               </div>
             </div>
-
-            {/* 右侧：图例 */}
-            <div className="w-full md:w-auto grid grid-cols-2 md:grid-cols-1 gap-3">
-              {chartData.map((entry, index) => (
-                <div 
-                  key={entry.name} 
-                  className={`flex items-center gap-3 p-2 rounded-lg border border-white/5 min-w-[140px] transition-all duration-300 ${
-                    activeIndex === index ? 'bg-white/10 scale-105' : 'bg-white/5'
-                  }`}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onMouseLeave={() => setActiveIndex(-1)}
-                >
-                  <div className="w-3 h-3 rounded-full shadow-lg shadow-black/50" style={{ backgroundColor: entry.color }}></div>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-gray-400 font-medium">{entry.name}</span>
-                    <span className="text-sm font-bold text-white">{entry.value}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          ) : (
+            <span className="text-xs text-gray-600">Enter handle</span>
+          )}
         </div>
-        
-        {/* [新增] 热力图组件位于最下方 */}
-        <ActivityHeatmap data={heatmapData} cardStyle={cardStyle} />
       </div>
-    </div>
-  );
-};
+    );
+  }
+);
 
-export default DashboardGrid;
+export default PlatformCard;
