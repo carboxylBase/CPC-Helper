@@ -4,7 +4,6 @@ import DatePicker from './DatePicker';
 
 // --- 工具函数 ---
 
-// 获取本地日期字符串 YYYY-MM-DD
 const getLocalDateStr = (date: Date = new Date()) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -12,7 +11,6 @@ const getLocalDateStr = (date: Date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
-// 日期加减逻辑
 const addDays = (dateStr: string, days: number) => {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
@@ -20,19 +18,16 @@ const addDays = (dateStr: string, days: number) => {
   return getLocalDateStr(date);
 };
 
-// 将日期字符串转为当天 00:00:00 的时间戳
 const getTimestampFromStr = (dateStr: string) => {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d).getTime();
 };
 
-// 判断某个日期是否在任务的有效期内
 const isDateInRange = (dateToCheck: string, startDate: string, duration: number) => {
   const startTs = getTimestampFromStr(startDate);
   const checkTs = getTimestampFromStr(dateToCheck);
   const dayMs = 24 * 60 * 60 * 1000;
   const endTs = startTs + (duration * dayMs); 
-
   return checkTs >= startTs && checkTs < endTs;
 };
 
@@ -49,6 +44,11 @@ export interface TodoItem {
   duration: number;    
 }
 
+// 专门为编辑表单定义的类型，支持 duration 为空
+interface EditFormState extends Omit<TodoItem, 'duration'> {
+  duration: number | '';
+}
+
 interface TodoPanelProps {
   cardStyle: React.CSSProperties;
 }
@@ -57,7 +57,7 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
   const [items, setItems] = useState<TodoItem[]>([]);
   const [viewDate, setViewDate] = useState(getLocalDateStr()); 
   
-  // [修改] duration 类型支持 string 以便清空输入框
+  // 新增任务表单状态
   const [newItem, setNewItem] = useState<{
     title: string;
     link: string;
@@ -72,6 +72,10 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
     duration: 1
   });
   
+  // 编辑态管理
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState | null>(null);
+
   const [showCompleted, setShowCompleted] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -114,27 +118,25 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
     setNewItem(prev => ({ ...prev, startDate: viewDate }));
   }, [viewDate]);
 
+  // --- 核心业务逻辑 ---
+
   const getProgressStyles = (item: TodoItem) => {
     if (item.completed) return { border: 'border-white/5', text: 'text-blue-300', label: 'Finished' };
-    
     const startTs = getTimestampFromStr(item.startDate);
     const dayMs = 24 * 60 * 60 * 1000;
     const totalMs = item.duration * dayMs;
     const elapsed = now - startTs;
     const progress = elapsed / totalMs;
-
     if (progress < 0) return { border: 'border-white/10', text: 'text-gray-400', label: 'Scheduled' };
     if (progress < 0.5) return { border: 'border-blue-500/30', text: 'text-blue-300', label: 'Early Stage' };
     if (progress < 0.8) return { border: 'border-yellow-500/40', text: 'text-yellow-400', label: 'In Progress' };
     if (progress < 1.0) return { border: 'border-orange-500/60', text: 'text-orange-400', label: 'Deadline Near' };
-    
     return { border: 'border-red-500/80', text: 'text-red-400', label: 'Overdue' };
   };
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.title.trim()) return;
-
     const task: TodoItem = {
       id: crypto.randomUUID(),
       title: newItem.title,
@@ -143,19 +145,39 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
       completed: false,
       startDate: newItem.startDate,
       targetDate: newItem.startDate, 
-      // 提交时，如果为空字符串则默认为 1 天
       duration: newItem.duration === '' ? 1 : newItem.duration,
       createdAt: Date.now(),
     };
-
     setItems(prev => [task, ...prev]);
-    // 重置表单，duration 回归默认值 1
     setNewItem({ ...newItem, title: '', link: '', note: '', duration: 1 }); 
   };
 
   const toggleComplete = (id: string) => {
     setItems(items.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
   };
+
+  const startEdit = (item: TodoItem) => {
+    setEditingId(item.id);
+    setEditForm({ ...item });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm(null);
+  };
+
+  const saveEdit = () => {
+    if (!editForm || !editForm.title.trim()) return;
+    // 强制转换 duration 为数字，防止空字符串存入
+    const updatedItem: TodoItem = {
+      ...editForm,
+      duration: editForm.duration === '' ? 1 : Number(editForm.duration)
+    };
+    setItems(prev => prev.map(it => it.id === updatedItem.id ? updatedItem : it));
+    setEditingId(null);
+    setEditForm(null);
+  };
+
   const requestDelete = (id: string) => setDeletingId(id);
   const confirmDelete = () => {
     if (deletingId) { setItems(items.filter(item => item.id !== deletingId)); setDeletingId(null); }
@@ -168,11 +190,9 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
   const visibleItems = items.filter(item => {
     const inRange = isDateInRange(viewDate, item.startDate, item.duration);
     if (inRange) return true;
-
     const endTs = getTimestampFromStr(item.startDate) + (item.duration * 24 * 60 * 60 * 1000);
     const isPast = endTs <= getTimestampFromStr(todayStr);
     if (isViewToday && !item.completed && isPast) return true;
-
     return false;
   });
 
@@ -206,12 +226,11 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
         </div>
       </div>
 
-      {/* 2. 输入区域 (已修复 Duration 输入体验) */}
+      {/* 2. 快速添加任务区域 */}
       <div className="rounded-xl p-6 shadow-lg border border-white/5 relative z-10" style={cardStyle}>
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white/90">
           <span>📝</span> Create Multi-day Plan
         </h2>
-        
         <form onSubmit={handleAddItem} className="flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             <div className="md:col-span-6 flex flex-col gap-1">
@@ -239,17 +258,14 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
                 min="1"
                 placeholder="1"
                 className="bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-white"
-                // [核心修改] 允许显示空字符串
                 value={newItem.duration}
                 onChange={e => {
                   const val = e.target.value;
-                  // 如果为空则设为空字符串，否则转为数字
                   setNewItem({...newItem, duration: val === '' ? '' : Number(val)});
                 }}
               />
             </div>
           </div>
-          
           <div className="flex flex-col md:flex-row gap-3">
             <input
               type="text"
@@ -265,9 +281,7 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
               value={newItem.note}
               onChange={e => setNewItem({...newItem, note: e.target.value})}
             />
-            <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2 rounded font-bold text-sm transition-colors shadow-lg shadow-blue-500/20">
-              Add Task
-            </button>
+            <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2 rounded font-bold text-sm transition-colors shadow-lg shadow-blue-500/20">Add Task</button>
           </div>
         </form>
       </div>
@@ -284,20 +298,86 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
         )}
 
         {activeItems.map(item => {
+          const isEditing = editingId === item.id;
           const status = getProgressStyles(item);
           const startTs = getTimestampFromStr(item.startDate);
           const dayMs = 24 * 60 * 60 * 1000;
           const progressPercent = Math.min(Math.max(((now - startTs) / (item.duration * dayMs)) * 100, 0), 100);
 
+          if (isEditing && editForm) {
+            // --- 编辑态视图 ---
+            return (
+              <div 
+                key={item.id} 
+                className="rounded-lg p-4 border border-blue-500/50 bg-blue-500/5 shadow-lg animate-in zoom-in-95 duration-200 relative z-30" 
+                style={cardStyle}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-blue-400 uppercase font-bold px-1">Title</label>
+                    <input 
+                      className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 outline-none"
+                      value={editForm.title}
+                      onChange={e => setEditForm({...editForm, title: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-blue-400 uppercase font-bold px-1">Link</label>
+                    <input 
+                      className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 outline-none"
+                      value={editForm.link}
+                      onChange={e => setEditForm({...editForm, link: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                   <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-blue-400 uppercase font-bold px-1">Start Date</label>
+                    {/* [修复] DatePicker 在编辑模式下的 z-index 优先级通过父级 z-30 提升 */}
+                    <DatePicker value={editForm.startDate} onChange={d => setEditForm({...editForm, startDate: d})} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-blue-400 uppercase font-bold px-1">Duration (Days)</label>
+                    <input 
+                      type="number"
+                      placeholder="1"
+                      className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 outline-none"
+                      // [修复] 允许清空
+                      value={editForm.duration}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setEditForm({...editForm, duration: val === '' ? '' : Number(val)});
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
+                    <label className="text-[10px] text-blue-400 uppercase font-bold px-1">Note</label>
+                    <input 
+                      className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 outline-none"
+                      value={editForm.note}
+                      onChange={e => setEditForm({...editForm, note: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                   <button onClick={cancelEdit} className="px-3 py-1 text-xs text-gray-400 hover:text-white transition-colors">Cancel</button>
+                   <button onClick={saveEdit} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1 rounded text-xs font-bold transition-colors">Save Changes</button>
+                </div>
+              </div>
+            );
+          }
+
+          // --- 普通展示视图 ---
           return (
             <div 
               key={item.id}
-              className={`group relative rounded-lg p-4 border flex items-start gap-4 transition-all hover:bg-white/5 overflow-hidden ${status.border}`}
+              onClick={() => startEdit(item)}
+              className={`group relative rounded-lg p-4 border flex items-start gap-4 transition-all hover:bg-white/5 cursor-pointer overflow-hidden ${status.border}`}
               style={status.label === 'Early Stage' ? cardStyle : { backgroundColor: 'rgba(15, 23, 42, 0.4)' }}
             >
               <button
                 type="button"
-                onClick={() => toggleComplete(item.id)}
+                onClick={(e) => { e.stopPropagation(); toggleComplete(item.id); }}
                 className="mt-1 w-5 h-5 rounded border border-gray-500 hover:border-blue-400 flex items-center justify-center flex-shrink-0"
               >
                 <div className="w-2.5 h-2.5 bg-transparent" />
@@ -306,24 +386,32 @@ const TodoPanel: React.FC<TodoPanelProps> = ({ cardStyle }) => {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
                   <div className="flex flex-col gap-1 min-w-0 pr-4">
-                    <a 
-                      href={item.link} target="_blank" rel="noreferrer"
-                      className={`font-medium hover:underline text-lg truncate block ${status.text}`}
-                      onClick={e => !item.link && e.preventDefault()}
-                    >
+                    <span className={`font-medium text-lg truncate block ${status.text}`}>
                       {item.title}
-                    </a>
+                    </span>
                     <div className="flex items-center gap-3 text-[10px] font-bold tracking-wider uppercase">
                       <span className={status.text}>{status.label}</span>
                       <span className="text-gray-500">🗓 {item.duration} Day(s)</span>
                       <span className="text-gray-500">Starts: {item.startDate}</span>
                     </div>
                   </div>
-                  <button type="button" onClick={() => requestDelete(item.id)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 px-2">×</button>
+                  <button 
+                    type="button" 
+                    onClick={(e) => { e.stopPropagation(); requestDelete(item.id); }}
+                    className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity px-2"
+                  >
+                    ×
+                  </button>
                 </div>
-                {item.note && <div className="mt-2 text-sm text-gray-400 bg-black/30 inline-block px-2 py-1 rounded max-w-full truncate">{item.note}</div>}
+                {(item.link || item.note) && (
+                  <div className="mt-2 flex gap-2 flex-wrap">
+                    {item.link && <span className="text-xs text-blue-400/70 truncate max-w-[200px]">{item.link}</span>}
+                    {item.note && <span className="text-xs text-gray-400 bg-black/30 px-2 py-0.5 rounded truncate max-w-[300px]">{item.note}</span>}
+                  </div>
+                )}
               </div>
 
+              {/* 进度条 */}
               <div 
                 className="absolute bottom-0 left-0 h-[2px] opacity-40 transition-all duration-700"
                 style={{ 
