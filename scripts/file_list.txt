@@ -1,2 +1,2 @@
-src/utils/history.ts
-src/components/ActivityHeatmap.tsx
+src/components/TodoPanel.tsx
+src/App.tsx
