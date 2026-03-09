@@ -152,4 +152,36 @@ const PlatformCard = forwardRef<PlatformCardRef, PlatformCardProps>(
   }
 );
 
-export default PlatformCard;
+// --- 新增：实际的 DashboardGrid 容器组件 ---
+interface DashboardGridProps {
+  cardStyle: any;
+}
+
+const DashboardGrid: React.FC<DashboardGridProps> = ({ cardStyle }) => {
+  // 定义需要渲染的平台列表
+  const platforms = [
+    { name: 'Codeforces', key: 'codeforces', enabled: true },
+    { name: 'LeetCode', key: 'leetcode', enabled: true },
+    { name: 'AtCoder', key: 'atcoder', enabled: true },
+    { name: 'Nowcoder', key: 'nowcoder', enabled: true },
+    { name: 'Luogu', key: 'luogu', enabled: true },
+    { name: 'Daimayuan', key: 'daimayuan', enabled: true },
+    { name: 'HDU', key: 'hdu', enabled: true },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {platforms.map(p => (
+        <PlatformCard
+          key={p.key}
+          platformName={p.name}
+          platformKey={p.key}
+          isEnabled={p.enabled}
+          cardStyle={cardStyle}
+        />
+      ))}
+    </div>
+  );
+};
+
+export default DashboardGrid;
